@@ -4,6 +4,7 @@ import GameWorld from './components/GameWorld';
 import { questions, subjects, Question } from './data/questions';
 import { BLOCK_TYPES, ITEM_TYPES, CRAFT_RECIPES, TOOL_DURABILITY } from './data/gameData';
 import ItemIcon from './components/ItemIcon';
+import Workbench from './components/Workbench';
 
 type GameState = 'start' | 'playing' | 'question' | 'win' | 'victory';
 interface DroppedCrystal { 
@@ -189,6 +190,7 @@ function App() {
   const [availableCrystals, setAvailableCrystals] = useState<number[]>(Array.from({ length: 20 }, (_, i) => i));
   // Break progress removed - using visual cracks instead
   const [showInventory, setShowInventory] = useState(false);
+  const [showWorkbench, setShowWorkbench] = useState(false);
   const [notification, setNotification] = useState<string | null>(null);
   const [crystalNotification, setCrystalNotification] = useState<string | null>(null);
   const [hotbar, setHotbar] = useState<(string | null)[]>(['wood_pickaxe', null, null, null, null, null, null, null, null]);
@@ -524,74 +526,11 @@ function App() {
     removeItem(itemId, 1);
   }, [hotbar, selectedSlot, removeItem, showNotif]);
 
-  const handleCraft = useCallback((recipeId: string) => {
-    const recipe = CRAFT_RECIPES.find(r => r.id === recipeId);
-    if (!recipe) return;
-    
-    // Check if workbench is required
-    if (recipe.requiresWorkbench) {
-      const workbenchCount = hotbarRef.current.filter(item => item === 'crafting_table').length +
-                            inventoryRef.current.filter(item => item === 'crafting_table').length;
-      if (workbenchCount === 0) {
-        showNotif('⚠️ Нужен верстак!');
-        return;
-      }
-    }
-    
-    // Check if we have all ingredients using refs
-    const hasAll = recipe.ingredients.every(ing => {
-      const count = hotbarRef.current.filter(item => item === ing.item).length +
-                   inventoryRef.current.filter(item => item === ing.item).length;
-      return count >= ing.count;
-    });
-    
-    if (!hasAll) {
-      showNotif('Недостаточно материалов!');
-      return;
-    }
-    
-    // Remove all ingredients at once
-    setInventory(prev => {
-      const newInv = [...prev];
-      
-      // Remove each ingredient
-      recipe.ingredients.forEach(ing => {
-        let removed = 0;
-        for (let i = 0; i < 27 && removed < ing.count; i++) {
-          if (newInv[i] === ing.item) {
-            newInv[i] = null;
-            removed++;
-          }
-        }
-        
-        // If we couldn't remove all from inventory, remove from hotbar
-        if (removed < ing.count) {
-          const remaining = ing.count - removed;
-          setHotbar(prevHotbar => {
-            const newHotbar = [...prevHotbar];
-            let hotbarRemoved = 0;
-            
-            for (let i = 0; i < 9 && hotbarRemoved < remaining; i++) {
-              if (newHotbar[i] === ing.item) {
-                newHotbar[i] = null;
-                hotbarRemoved++;
-              }
-            }
-            
-            hotbarRef.current = newHotbar;
-            return newHotbar;
-          });
-        }
-      });
-      
-      inventoryRef.current = newInv;
-      return newInv;
-    });
-    
-    // Add result
-    const resultData = ITEM_TYPES[recipe.result.item];
+  // Handle craft from Workbench component
+  const handleWorkbenchCraft = useCallback((resultItem: string, count: number) => {
+    const resultData = ITEM_TYPES[resultItem];
     if (resultData?.durability) {
-      setToolDurability(prev => ({ ...prev, [recipe.result.item]: resultData.durability! }));
+      setToolDurability(prev => ({ ...prev, [resultItem]: resultData.durability! }));
     }
     
     // Add result items
@@ -599,9 +538,9 @@ function App() {
       const newInv = [...prev];
       let added = 0;
       
-      for (let i = 0; i < 27 && added < recipe.result.count; i++) {
+      for (let i = 0; i < 27 && added < count; i++) {
         if (!newInv[i]) {
-          newInv[i] = recipe.result.item;
+          newInv[i] = resultItem;
           added++;
         }
       }
@@ -609,15 +548,15 @@ function App() {
       inventoryRef.current = newInv;
       
       // If we couldn't add all to inventory, add to hotbar
-      if (added < recipe.result.count) {
-        const remaining = recipe.result.count - added;
+      if (added < count) {
+        const remaining = count - added;
         setHotbar(prevHotbar => {
           const newHotbar = [...prevHotbar];
           let hotbarAdded = 0;
           
           for (let i = 0; i < 9 && hotbarAdded < remaining; i++) {
             if (!newHotbar[i]) {
-              newHotbar[i] = recipe.result.item;
+              newHotbar[i] = resultItem;
               hotbarAdded++;
             }
           }
@@ -630,7 +569,20 @@ function App() {
       return newInv;
     });
     
-    showNotif(`🔨 Создано: ${recipe.name} x${recipe.result.count}`);
+    const recipe = CRAFT_RECIPES.find(r => r.result.item === resultItem);
+    showNotif(`🔨 Создано: ${recipe?.name || resultItem} x${count}`);
+  }, [showNotif]);
+
+  // Open workbench if player has one
+  const openWorkbench = useCallback(() => {
+    const workbenchCount = hotbarRef.current.filter(item => item === 'crafting_table').length +
+                          inventoryRef.current.filter(item => item === 'crafting_table').length;
+    if (workbenchCount === 0) {
+      showNotif('⚠️ Нужен верстак!');
+      return;
+    }
+    setShowWorkbench(true);
+    if (document.pointerLockElement) document.exitPointerLock();
   }, [showNotif]);
 
   const handlePortalActivated = useCallback(() => {
@@ -652,6 +604,20 @@ function App() {
     setCrystalPositions([]);
   };
 
+  // Drop item from hotbar
+  const handleDropItem = useCallback(() => {
+    const itemId = hotbar[selectedSlot];
+    if (!itemId) return;
+    
+    setHotbar(prev => {
+      const newHotbar = [...prev];
+      newHotbar[selectedSlot] = null;
+      return newHotbar;
+    });
+    
+    showNotif(`🗑️ Выброшено: ${ITEM_TYPES[itemId].name}`);
+  }, [hotbar, selectedSlot, showNotif]);
+
   // Keyboard handler
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
@@ -662,7 +628,16 @@ function App() {
         setShowInventory(prev => !prev);
         if (document.pointerLockElement) document.exitPointerLock();
       }
-      if (e.key === 'Escape') setShowInventory(false);
+      if (e.key === 'Escape') {
+        setShowInventory(false);
+        setShowWorkbench(false);
+      }
+      if (e.key === 'q' || e.key === 'Q' || e.key === 'й' || e.key === 'Й') {
+        handleDropItem();
+      }
+      if (e.key === 'c' || e.key === 'C' || e.key === 'с' || e.key === 'С') {
+        openWorkbench();
+      }
     };
     const handleWheel = (e: WheelEvent) => {
       if (gameState !== 'playing') return;
@@ -909,8 +884,10 @@ function App() {
                 <div className="text-gray-300 text-[10px] space-y-0.5">
                   <div><span className="text-white font-bold">WASD</span> — ходить</div>
                   <div><span className="text-white font-bold">ЛКМ</span> — копать</div>
-                  <div><span className="text-white font-bold">ПКМ</span> — ставить</div>
+                  <div><span className="text-white font-bold">ПКМ</span> — ставить/садить</div>
                   <div><span className="text-white font-bold">E</span> — инвентарь</div>
+                  <div><span className="text-white font-bold">C</span> — верстак</div>
+                  <div><span className="text-white font-bold">Q</span> — выбросить</div>
                   <div><span className="text-white font-bold">1-9</span> — слоты</div>
                 </div>
               </div>
@@ -1005,213 +982,29 @@ function App() {
                 <div>
                   <h3 className="text-amber-400 font-bold mb-2 text-sm">🔨 Крафт</h3>
                   
-                  {/* Materials */}
-                  <div className="mb-3">
-                    <h4 className="text-gray-300 font-bold mb-2 text-xs">📦 Материалы</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                      {CRAFT_RECIPES.filter(r => r.category === 'materials').map(recipe => {
-                        const getItemCount = (itemId: string) => 
-                          hotbarRef.current.filter(item => item === itemId).length +
-                          inventoryRef.current.filter(item => item === itemId).length;
-                        
-                        const craftable = recipe.ingredients.every(ing => getItemCount(ing.item) >= ing.count);
-                        const missingItems = recipe.ingredients
-                          .filter(ing => getItemCount(ing.item) < ing.count)
-                          .map(ing => `${ITEM_TYPES[ing.item]?.name || ing.item}: ${ing.count - getItemCount(ing.item)}`)
-                          .join(', ');
-                        const tooltip = craftable ? 'Можно скрафтить!' : `Не хватает: ${missingItems || 'верстака'}`;
-                        
-                        return (
-                          <div key={recipe.id} className={`rounded-lg p-2 border ${craftable ? 'border-green-500/50 bg-green-900/20 cursor-pointer hover:bg-green-900/30' : 'border-gray-600/30 bg-gray-800/30 opacity-60'}`} onClick={() => craftable && handleCraft(recipe.id)} title={tooltip}>
-                            <div className="flex items-center gap-2">
-                              <ItemIcon itemId={recipe.result.item} size={32} />
-                              <div className="flex-1 min-w-0">
-                                <div className="text-white font-bold text-xs truncate">{recipe.name}</div>
-                                <div className="text-gray-400 text-[10px] truncate">{recipe.description}</div>
-                              </div>
-                              {craftable && <div className="text-green-400 text-xs font-bold">✓</div>}
-                            </div>
-                            <div className="mt-1 flex flex-wrap gap-1">
-                              {recipe.ingredients.map((ing, i) => {
-                                const itemCount = getItemCount(ing.item);
-                                const hasEnough = itemCount >= ing.count;
-                                const itemName = ITEM_TYPES[ing.item]?.name || ing.item;
-                                const itemTooltip = hasEnough ? `${itemName}: достаточно` : `${itemName}: нужно ещё ${ing.count - itemCount}`;
-                                return (
-                                  <div key={i} className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] ${hasEnough ? 'bg-green-800/30 text-green-300' : 'bg-red-800/30 text-red-300'}`} title={itemTooltip}>
-                                    <ItemIcon itemId={ing.item} size={12} />
-                                    <span>{itemCount}/{ing.count}</span>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
+                  {/* Workbench button */}
+                  <button
+                    onClick={openWorkbench}
+                    className="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 px-4 rounded-lg transition-colors mb-3"
+                  >
+                    🔨 Открыть верстак
+                  </button>
                   
-                  {/* Tools */}
-                  <div className="mb-3">
-                    <h4 className="text-gray-300 font-bold mb-2 text-xs">⛏️ Инструменты</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                      {CRAFT_RECIPES.filter(r => r.category === 'tools').map(recipe => {
-                        const getItemCount = (itemId: string) => 
-                          hotbarRef.current.filter(item => item === itemId).length +
-                          inventoryRef.current.filter(item => item === itemId).length;
-                        
-                        const craftable = recipe.ingredients.every(ing => getItemCount(ing.item) >= ing.count);
-                        const needsWorkbench = recipe.requiresWorkbench && getItemCount('crafting_table') === 0;
-                        const missingItems = recipe.ingredients
-                          .filter(ing => getItemCount(ing.item) < ing.count)
-                          .map(ing => `${ITEM_TYPES[ing.item]?.name || ing.item}: ${ing.count - getItemCount(ing.item)}`)
-                          .join(', ');
-                        let tooltip = 'Можно скрафтить!';
-                        if (!craftable) {
-                          tooltip = `Не хватает: ${missingItems || 'материалов'}`;
-                        }
-                        if (needsWorkbench) {
-                          tooltip = 'Нужен верстак!';
-                        }
-                        
-                        return (
-                          <div key={recipe.id} className={`rounded-lg p-2 border ${craftable && !needsWorkbench ? 'border-green-500/50 bg-green-900/20 cursor-pointer hover:bg-green-900/30' : 'border-gray-600/30 bg-gray-800/30 opacity-60'}`} onClick={() => craftable && !needsWorkbench && handleCraft(recipe.id)} title={tooltip}>
-                            <div className="flex items-center gap-2">
-                              <ItemIcon itemId={recipe.result.item} size={32} />
-                              <div className="flex-1 min-w-0">
-                              <div className="text-white font-bold text-xs truncate">{recipe.name}</div>
-                              <div className="text-gray-400 text-[10px] truncate">{recipe.description}</div>
-                              {recipe.requiresWorkbench && <div className="text-orange-400 text-[10px]">🔨 Верстак</div>}
-                              {recipe.requiresQuestion && <div className="text-yellow-400 text-[10px]">⚠️ Вопрос</div>}                              </div>
-                              {craftable && !needsWorkbench && <div className="text-green-400 text-xs font-bold">✓</div>}
-                            </div>
-                            <div className="mt-1 flex flex-wrap gap-1">
-                              {recipe.ingredients.map((ing, i) => {
-                                const itemCount = getItemCount(ing.item);
-                                const hasEnough = itemCount >= ing.count;
-                                const itemName = ITEM_TYPES[ing.item]?.name || ing.item;
-                                const itemTooltip = hasEnough ? `${itemName}: достаточно` : `${itemName}: нужно ещё ${ing.count - itemCount}`;
-                                return (
-                                  <div key={i} className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] ${hasEnough ? 'bg-green-800/30 text-green-300' : 'bg-red-800/30 text-red-300'}`} title={itemTooltip}>
-                                    <ItemIcon itemId={ing.item} size={12} />
-                                    <span>{itemCount}/{ing.count}</span>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        );
-                      })}
+                  {/* Recipe book */}
+                  <div className="bg-gray-800/50 rounded-lg p-3 mb-3">
+                    <h4 className="text-gray-300 font-bold mb-2 text-xs">📖 Рецепты (для справки)</h4>
+                    <div className="grid grid-cols-1 gap-1 max-h-40 overflow-y-auto">
+                      {CRAFT_RECIPES.filter(r => !r.requiresWorkbench).map(recipe => (
+                        <div key={recipe.id} className="flex items-center gap-2 text-xs text-gray-400">
+                          <ItemIcon itemId={recipe.result.item} size={16} />
+                          <span className="truncate">{recipe.name}: {recipe.description}</span>
+                        </div>
+                      ))}
                     </div>
+                    <p className="text-gray-500 text-[10px] mt-2">
+                      💡 Для сложных рецептов нужен верстак
+                    </p>
                   </div>
-                  
-                  {/* Building */}
-                  <div className="mb-3">
-                    <h4 className="text-gray-300 font-bold mb-2 text-xs">🏗️ Строительство</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                      {CRAFT_RECIPES.filter(r => r.category === 'building').map(recipe => {
-                        const getItemCount = (itemId: string) => 
-                          hotbarRef.current.filter(item => item === itemId).length +
-                          inventoryRef.current.filter(item => item === itemId).length;
-                        
-                        const craftable = recipe.ingredients.every(ing => getItemCount(ing.item) >= ing.count);
-                        const needsWorkbench = recipe.requiresWorkbench && getItemCount('crafting_table') === 0;
-                        const missingItems = recipe.ingredients
-                          .filter(ing => getItemCount(ing.item) < ing.count)
-                          .map(ing => `${ITEM_TYPES[ing.item]?.name || ing.item}: ${ing.count - getItemCount(ing.item)}`)
-                          .join(', ');
-                        let tooltip = 'Можно скрафтить!';
-                        if (!craftable) {
-                          tooltip = `Не хватает: ${missingItems || 'материалов'}`;
-                        }
-                        if (needsWorkbench) {
-                          tooltip = 'Нужен верстак!';
-                        }
-                        
-                        return (
-                          <div key={recipe.id} className={`rounded-lg p-2 border ${craftable && !needsWorkbench ? 'border-green-500/50 bg-green-900/20 cursor-pointer hover:bg-green-900/30' : 'border-gray-600/30 bg-gray-800/30 opacity-60'}`} onClick={() => craftable && !needsWorkbench && handleCraft(recipe.id)} title={tooltip}>
-                            <div className="flex items-center gap-2">
-                              <ItemIcon itemId={recipe.result.item} size={32} />
-                              <div className="flex-1 min-w-0">
-                                <div className="text-white font-bold text-xs truncate">{recipe.name}</div>
-                                <div className="text-gray-400 text-[10px] truncate">{recipe.description}</div>
-                              </div>
-                              {craftable && !needsWorkbench && <div className="text-green-400 text-xs font-bold">✓</div>}
-                            </div>
-                            <div className="mt-1 flex flex-wrap gap-1">
-                              {recipe.ingredients.map((ing, i) => {
-                                const itemCount = getItemCount(ing.item);
-                                const hasEnough = itemCount >= ing.count;
-                                const itemName = ITEM_TYPES[ing.item]?.name || ing.item;
-                                const itemTooltip = hasEnough ? `${itemName}: достаточно` : `${itemName}: нужно ещё ${ing.count - itemCount}`;
-                                return (
-                                  <div key={i} className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] ${hasEnough ? 'bg-green-800/30 text-green-300' : 'bg-red-800/30 text-red-300'}`} title={itemTooltip}>
-                                    <ItemIcon itemId={ing.item} size={12} />
-                                    <span>{itemCount}/{ing.count}</span>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                  
-                  {/* Special */}
-                  {CRAFT_RECIPES.filter(r => r.category === 'special').length > 0 && (
-                    <div>
-                      <h4 className="text-gray-300 font-bold mb-2 text-xs">✨ Особое</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                        {CRAFT_RECIPES.filter(r => r.category === 'special').map(recipe => {
-                          const getItemCount = (itemId: string) => 
-                            hotbarRef.current.filter(item => item === itemId).length +
-                            inventoryRef.current.filter(item => item === itemId).length;
-                          
-                          const craftable = recipe.ingredients.every(ing => getItemCount(ing.item) >= ing.count);
-                          const needsWorkbench = recipe.requiresWorkbench && getItemCount('crafting_table') === 0;
-                          const missingItems = recipe.ingredients
-                            .filter(ing => getItemCount(ing.item) < ing.count)
-                            .map(ing => `${ITEM_TYPES[ing.item]?.name || ing.item}: ${ing.count - getItemCount(ing.item)}`)
-                            .join(', ');
-                          let tooltip = 'Можно скрафтить!';
-                          if (!craftable) {
-                            tooltip = `Не хватает: ${missingItems || 'материалов'}`;
-                          }
-                          if (needsWorkbench) {
-                            tooltip = 'Нужен верстак!';
-                          }
-                          
-                          return (
-                            <div key={recipe.id} className={`rounded-lg p-2 border ${craftable && !needsWorkbench ? 'border-purple-500/50 bg-purple-900/20 cursor-pointer hover:bg-purple-900/30' : 'border-gray-600/30 bg-gray-800/30 opacity-60'}`} onClick={() => craftable && !needsWorkbench && handleCraft(recipe.id)} title={tooltip}>
-                              <div className="flex items-center gap-2">
-                                <ItemIcon itemId={recipe.result.item} size={32} />
-                                <div className="flex-1 min-w-0">
-                                  <div className="text-white font-bold text-xs truncate">{recipe.name}</div>
-                                  <div className="text-gray-400 text-[10px] truncate">{recipe.description}</div>
-                                </div>
-                                {craftable && !needsWorkbench && <div className="text-purple-400 text-xs font-bold">✓</div>}
-                              </div>
-                              <div className="mt-1 flex flex-wrap gap-1">
-                                {recipe.ingredients.map((ing, i) => {
-                                  const itemCount = getItemCount(ing.item);
-                                  const hasEnough = itemCount >= ing.count;
-                                  const itemName = ITEM_TYPES[ing.item]?.name || ing.item;
-                                  const itemTooltip = hasEnough ? `${itemName}: достаточно` : `${itemName}: нужно ещё ${ing.count - itemCount}`;
-                                  return (
-                                    <div key={i} className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] ${hasEnough ? 'bg-purple-800/30 text-purple-300' : 'bg-red-800/30 text-red-300'}`} title={itemTooltip}>
-                                      <ItemIcon itemId={ing.item} size={12} />
-                                      <span>{itemCount}/{ing.count}</span>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
                 </div>
 
                 <div className="mt-4 pt-3 border-t border-gray-700 text-center text-gray-500 text-xs">
@@ -1221,6 +1014,15 @@ function App() {
             </div>
           )}
         </>
+      )}
+
+      {showWorkbench && (
+        <Workbench
+          inventory={inventory}
+          setInventory={setInventory}
+          onCraft={handleWorkbenchCraft}
+          onClose={() => setShowWorkbench(false)}
+        />
       )}
 
       {showCrystalChoice && (
