@@ -105,12 +105,12 @@ export default function StartScreen({ onStart }: StartScreenProps) {
             </div>
           </div>
 
-          {/* NPCs */}
+          {/* World exploration */}
           <div className="bg-blue-900/30 border border-blue-500/30 rounded-lg p-3 mb-4">
-            <h3 className="text-blue-300 font-bold text-sm mb-2">👥 NPC в мире:</h3>
+            <h3 className="text-blue-300 font-bold text-sm mb-2">🌍 Исследование мира:</h3>
             <p className="text-gray-300 text-xs">
-              По карте бегают NPC! Подойди к ним — они поприветствуют тебя звуком. 
-              Исследуй мир и находи ресурсы в разных биомах!
+              Исследуй огромный мир 80x80 блоков с разными биомами! 
+              Находи руды, собирай ресурсы и строй!
             </p>
           </div>
 

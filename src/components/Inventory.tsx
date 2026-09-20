@@ -146,9 +146,6 @@ export default function Inventory({ hotbar, inventory, setHotbar, setInventory, 
           <div className="fixed top-20 left-1/2 -translate-x-1/2 bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 z-50 pointer-events-none">
             <div className="text-white font-bold">{ITEM_TYPES[hoveredItem]?.name}</div>
             <div className="text-gray-400 text-sm">{ITEM_TYPES[hoveredItem]?.description}</div>
-            {ITEM_TYPES[hoveredItem]?.toolSpeed && (
-              <div className="text-green-400 text-xs">Скорость: x{ITEM_TYPES[hoveredItem].toolSpeed}</div>
-            )}
             {ITEM_TYPES[hoveredItem]?.durability && (
               <div className="text-yellow-400 text-xs">Прочность: {toolDurability[hoveredItem] || ITEM_TYPES[hoveredItem].durability}/{ITEM_TYPES[hoveredItem].durability}</div>
             )}

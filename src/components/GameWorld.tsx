@@ -497,20 +497,8 @@ export default function GameWorld({
             pickaxeSwingRef.current.time = 0;
             swingCooldownRef.current = 0.25;
             
-            const selectedItem = hotbarRef.current[selectedSlotRef.current];
-            let toolSpeed = 1; // Hand speed
-            
-            // Tool speed based on equipped item
-            if (selectedItem) {
-              const itemData = ITEM_TYPES[selectedItem];
-              if (itemData?.toolSpeed) {
-                toolSpeed = itemData.toolSpeed;
-              } else if (selectedItem === 'stick') {
-                toolSpeed = 1.5; // Stick is slightly better than hand
-              }
-            }
-            
-            hitBlock.block.health -= toolSpeed;
+            // Basic mining speed - no tool acceleration
+            hitBlock.block.health -= 1;
             const blockTypeData = BLOCK_TYPES[hitBlock.block.type];
             const damageRatio = 1 - (hitBlock.block.health / hitBlock.block.maxHealth);
             

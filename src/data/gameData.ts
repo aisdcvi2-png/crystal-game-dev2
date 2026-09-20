@@ -90,7 +90,6 @@ export interface ItemType {
   category: 'material' | 'tool' | 'block' | 'special' | 'food';
   stackSize: number;
   toolTier?: number;
-  toolSpeed?: number;
   durability?: number;
   placeable?: boolean;
   blockId?: string;
@@ -154,10 +153,10 @@ export const ITEM_TYPES: Record<string, ItemType> = {
   crystal: { id: 'crystal', name: 'Кристалл', description: 'Магический кристалл!', category: 'special', stackSize: 64 },
   oak_log_item: { id: 'oak_log_item', name: 'Древесина', description: 'Бревно', category: 'material', stackSize: 64 },
   portal_key: { id: 'portal_key', name: 'Ключ портала', description: 'Активирует портал! Собери 20 кристаллов', category: 'special', stackSize: 1 },
-  wood_pickaxe: { id: 'wood_pickaxe', name: 'Деревянная кирка', description: 'Скорость: x2, Прочность: 60', category: 'tool', stackSize: 1, toolTier: 1, toolSpeed: 2, durability: TOOL_DURABILITY.wood },
-  stone_pickaxe: { id: 'stone_pickaxe', name: 'Каменная кирка', description: 'Скорость: x4, Прочность: 132', category: 'tool', stackSize: 1, toolTier: 2, toolSpeed: 4, durability: TOOL_DURABILITY.stone },
-  iron_pickaxe: { id: 'iron_pickaxe', name: 'Железная кирка', description: 'Скорость: x6, Прочность: 251', category: 'tool', stackSize: 1, toolTier: 3, toolSpeed: 6, durability: TOOL_DURABILITY.iron },
-  diamond_pickaxe: { id: 'diamond_pickaxe', name: 'Алмазная кирка', description: 'Скорость: x8, Прочность: 1562', category: 'tool', stackSize: 1, toolTier: 4, toolSpeed: 8, durability: TOOL_DURABILITY.diamond },
+  wood_pickaxe: { id: 'wood_pickaxe', name: 'Деревянная кирка', description: 'Прочность: 60', category: 'tool', stackSize: 1, toolTier: 1, durability: TOOL_DURABILITY.wood },
+  stone_pickaxe: { id: 'stone_pickaxe', name: 'Каменная кирка', description: 'Прочность: 132', category: 'tool', stackSize: 1, toolTier: 2, durability: TOOL_DURABILITY.stone },
+  iron_pickaxe: { id: 'iron_pickaxe', name: 'Железная кирка', description: 'Прочность: 251', category: 'tool', stackSize: 1, toolTier: 3, durability: TOOL_DURABILITY.iron },
+  diamond_pickaxe: { id: 'diamond_pickaxe', name: 'Алмазная кирка', description: 'Прочность: 1562', category: 'tool', stackSize: 1, toolTier: 4, durability: TOOL_DURABILITY.diamond },
   dirt_block: { id: 'dirt_block', name: 'Земля', description: 'Поставь землю', category: 'block', stackSize: 64, placeable: true, blockId: 'dirt', color: 0x8B6914 },
   sand_block: { id: 'sand_block', name: 'Песок', description: 'Поставь песок', category: 'block', stackSize: 64, placeable: true, blockId: 'sand', color: 0xd4c475 },
   planks_block: { id: 'planks_block', name: 'Доски', description: 'Строй из досок', category: 'block', stackSize: 64, placeable: true, blockId: 'planks', color: 0xBC8E4B },

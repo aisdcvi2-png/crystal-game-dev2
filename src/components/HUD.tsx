@@ -176,14 +176,11 @@ export default function HUD({
         </div>
         
         {/* Current tool info */}
-        {hotbar[selectedSlot] && ITEM_TYPES[hotbar[selectedSlot]!]?.toolSpeed && (
+        {hotbar[selectedSlot] && (
           <div className="mt-2 text-center">
             <div className="bg-gray-900/80 backdrop-blur-sm border border-gray-600/50 rounded-lg px-3 py-1 inline-block">
               <span className="text-amber-400 text-xs font-bold">
                 ⛏️ {ITEM_TYPES[hotbar[selectedSlot]!].name}
-              </span>
-              <span className="text-gray-400 text-xs ml-2">
-                Скорость: x{ITEM_TYPES[hotbar[selectedSlot]!].toolSpeed}
               </span>
             </div>
           </div>
@@ -191,7 +188,7 @@ export default function HUD({
         {!hotbar[selectedSlot] && (
           <div className="mt-2 text-center">
             <div className="bg-gray-900/80 backdrop-blur-sm border border-gray-600/50 rounded-lg px-3 py-1 inline-block">
-              <span className="text-gray-400 text-xs">✋ Рука (Скорость: x1)</span>
+              <span className="text-gray-400 text-xs">✋ Рука</span>
             </div>
           </div>
         )}
