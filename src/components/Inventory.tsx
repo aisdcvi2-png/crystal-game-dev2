@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ITEM_TYPES, CRAFT_RECIPES, CraftRecipe } from '../data/gameData';
+import { ITEM_TYPES, CRAFT_RECIPES } from '../data/gameData';
 import ItemIcon from './ItemIcon';
 
 interface InventoryProps {
@@ -14,8 +14,8 @@ interface InventoryProps {
 }
 
 export default function Inventory({ hotbar, inventory, setHotbar, setInventory, onCraft, onClose, countItem, toolDurability }: InventoryProps) {
-  const [activeTab, setActiveTab] = useState<'inventory' | 'craft' | 'manual'>('inventory');
-  const [craftCategory, setCraftCategory] = useState<'tools' | 'materials' | 'building' | 'special'>('tools');
+  const [activeTab, setActiveTab] = useState<'inventory' | 'craft'>('inventory');
+  const [craftCategory, setCraftCategory] = useState<'tools' | 'materials' | 'building'>('tools');
   const [dragItem, setDragItem] = useState<{ item: string; from: 'hotbar' | 'inventory'; index: number } | null>(null);
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
 
@@ -102,7 +102,7 @@ export default function Inventory({ hotbar, inventory, setHotbar, setInventory, 
           <>
             <ItemIcon itemId={item} size={36} />
             <span className="absolute bottom-0.5 right-1 text-xs text-white font-bold">
-              {item ? countItem(item) : ''}
+              {countItem(item)}
             </span>
             {durability !== null && maxDurability !== null && (
               <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-700 rounded-b">
@@ -121,8 +121,8 @@ export default function Inventory({ hotbar, inventory, setHotbar, setInventory, 
     );
   };
 
-  const canCraft = (recipe: CraftRecipe): boolean => {
-    return recipe.ingredients.every(ing => countItem(ing.item) >= ing.count);
+  const canCraft = (recipe: any): boolean => {
+    return recipe.ingredients.every((ing: any) => countItem(ing.item) >= ing.count);
   };
 
   const filteredRecipes = CRAFT_RECIPES.filter(r => r.category === craftCategory);
@@ -138,10 +138,8 @@ export default function Inventory({ hotbar, inventory, setHotbar, setInventory, 
         <div className="flex gap-2 mb-4">
           <button onClick={() => setActiveTab('inventory')} className={`px-4 py-2 rounded-lg font-bold ${activeTab === 'inventory' ? 'bg-purple-600 text-white' : 'bg-gray-700 text-gray-300'}`}>🎒 Предметы</button>
           <button onClick={() => setActiveTab('craft')} className={`px-4 py-2 rounded-lg font-bold ${activeTab === 'craft' ? 'bg-amber-600 text-white' : 'bg-gray-700 text-gray-300'}`}>🔨 Крафт</button>
-          <button onClick={() => setActiveTab('manual')} className={`px-4 py-2 rounded-lg font-bold ${activeTab === 'manual' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'}`}>📖 Мануал</button>
         </div>
 
-        {/* Tooltip */}
         {hoveredItem && (
           <div className="fixed top-20 left-1/2 -translate-x-1/2 bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 z-50 pointer-events-none">
             <div className="text-white font-bold">{ITEM_TYPES[hoveredItem]?.name}</div>
@@ -171,9 +169,9 @@ export default function Inventory({ hotbar, inventory, setHotbar, setInventory, 
         {activeTab === 'craft' && (
           <div>
             <div className="flex gap-2 mb-4">
-              {(['tools', 'materials', 'building', 'special'] as const).map(cat => (
+              {(['tools', 'materials', 'building'] as const).map(cat => (
                 <button key={cat} onClick={() => setCraftCategory(cat)} className={`px-3 py-1.5 rounded-lg text-sm font-bold ${craftCategory === cat ? 'bg-amber-600 text-white' : 'bg-gray-700 text-gray-300'}`}>
-                  {cat === 'tools' ? '⛏️ Инструменты' : cat === 'materials' ? '🧱 Материалы' : cat === 'building' ? '🏗️ Строительство' : '✨ Особое'}
+                  {cat === 'tools' ? '⛏️ Инструменты' : cat === 'materials' ? '🧱 Материалы' : '🏗️ Строительство'}
                 </button>
               ))}
             </div>
@@ -192,7 +190,7 @@ export default function Inventory({ hotbar, inventory, setHotbar, setInventory, 
                       {craftable && <button className="bg-green-600 text-white px-3 py-1 rounded-lg text-sm font-bold">Создать</button>}
                     </div>
                     <div className="mt-2 flex flex-wrap gap-2">
-                      {recipe.ingredients.map((ing, i) => {
+                      {recipe.ingredients.map((ing: any, i: number) => {
                         const hasEnough = countItem(ing.item) >= ing.count;
                         return (
                           <div key={i} className={`flex items-center gap-1 px-2 py-1 rounded text-xs ${hasEnough ? 'bg-green-800/30 text-green-300' : 'bg-red-800/30 text-red-300'}`}>
@@ -205,63 +203,6 @@ export default function Inventory({ hotbar, inventory, setHotbar, setInventory, 
                   </div>
                 );
               })}
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'manual' && (
-          <div className="text-gray-300 space-y-4">
-            <h3 className="text-xl font-bold text-white">📖 Мануал игры</h3>
-            
-            <div className="bg-gray-800/50 rounded-lg p-4">
-              <h4 className="text-amber-400 font-bold mb-2">🎯 Цель игры</h4>
-              <p className="text-sm">Собери 20 кристаллов, отвечая на вопросы по 5 предметам 2 класса. Кристаллы выпадают из руды при добыче!</p>
-            </div>
-
-            <div className="bg-gray-800/50 rounded-lg p-4">
-              <h4 className="text-amber-400 font-bold mb-2">⛏️ Управление</h4>
-              <ul className="text-sm space-y-1">
-                <li><span className="text-white font-bold">WASD</span> — движение</li>
-                <li><span className="text-white font-bold">Мышь</span> — обзор (клик для захвата)</li>
-                <li><span className="text-white font-bold">ЛКМ (удерж.)</span> — копать блок</li>
-                <li><span className="text-white font-bold">ПКМ</span> — ставить блок</li>
-                <li><span className="text-white font-bold">E</span> — инвентарь/крафт</li>
-                <li><span className="text-white font-bold">1-9</span> — выбор слота</li>
-                <li><span className="text-white font-bold">Колёсико</span> — переключение слотов</li>
-                <li><span className="text-white font-bold">Пробел</span> — прыжок</li>
-              </ul>
-            </div>
-
-            <div className="bg-gray-800/50 rounded-lg p-4">
-              <h4 className="text-amber-400 font-bold mb-2">⚒️ Кирки и прочность</h4>
-              <p className="text-sm mb-2">Кирки изнашиваются при добыче! Более дорогие кирки быстрее и прочнее:</p>
-              <ul className="text-sm space-y-1">
-                <li>🪵 <span className="text-amber-300">Деревянная</span> — скорость x2, прочность 60</li>
-                <li>🪨 <span className="text-gray-300">Каменная</span> — скорость x4, прочность 132</li>
-                <li>⬜ <span className="text-gray-100">Железная</span> — скорость x6, прочность 251</li>
-                <li>💎 <span className="text-cyan-300">Алмазная</span> — скорость x8, прочность 1562</li>
-              </ul>
-            </div>
-
-            <div className="bg-gray-800/50 rounded-lg p-4">
-              <h4 className="text-amber-400 font-bold mb-2">💎 Кристаллы</h4>
-              <p className="text-sm">Кристаллы случайно выпадают из руды! Подойди к светящемуся кристаллу чтобы подобрать. Затем ответь на вопрос — при правильном ответе кристалл засчитан!</p>
-            </div>
-
-            <div className="bg-gray-800/50 rounded-lg p-4">
-              <h4 className="text-amber-400 font-bold mb-2">🔨 Крафт</h4>
-              <p className="text-sm mb-2">Создавай инструменты и материалы. Продвинутые кирки требуют ответа на вопрос!</p>
-              <p className="text-sm">Каждые 5 правильных ответов = бонусные материалы. Каждые 10 = редкие ресурсы!</p>
-            </div>
-
-            <div className="bg-gray-800/50 rounded-lg p-4">
-              <h4 className="text-amber-400 font-bold mb-2">🌍 Слои мира</h4>
-              <ul className="text-sm space-y-1">
-                <li>🟩 <span className="text-green-300">Трава</span> — поверхность, даёт семена и саженцы</li>
-                <li>🟫 <span className="text-amber-700">Земля</span> — можно сажать деревья</li>
-                <li>⬜ <span className="text-gray-300">Камень</span> — содержит уголь и железо</li>
-                <li>⬛ <span className="text-gray-500">Сланец</span> — глубины, содержит алмазы</li>
-              </ul>
             </div>
           </div>
         )}

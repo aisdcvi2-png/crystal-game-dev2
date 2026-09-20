@@ -4,16 +4,14 @@ export interface Question {
   question: string;
   options: string[];
   correct: number;
-  difficulty?: 'easy' | 'medium' | 'hard';
-  reward?: string; // bonus item for hard questions
 }
 
 export const subjects = [
-  { name: 'Математика', icon: '🔢', color: '#4CAF50' },
-  { name: 'Русский язык', icon: '📝', color: '#2196F3' },
-  { name: 'Окружающий мир', icon: '🌍', color: '#FF9800' },
-  { name: 'Литературное чтение', icon: '📚', color: '#9C27B0' },
-  { name: 'Английский язык', icon: '🇬🇧', color: '#F44336' },
+  { name: 'Математика', icon: '🔢' },
+  { name: 'Русский язык', icon: '📝' },
+  { name: 'Окружающий мир', icon: '🌍' },
+  { name: 'Литературное чтение', icon: '📚' },
+  { name: 'Английский язык', icon: '🇬🇧' },
 ];
 
 export const questions: Question[] = [
