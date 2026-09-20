@@ -237,62 +237,86 @@ function App() {
     const itemData = ITEM_TYPES[itemId];
     if (!itemData) return;
     
-    // Add items one by one
-    for (let c = 0; c < count; c++) {
-      setInventory(prev => {
-        const newInv = [...prev];
-        // Try to add to inventory first
-        for (let i = 0; i < 27; i++) {
-          if (!newInv[i]) {
-            newInv[i] = itemId;
-            return newInv;
-          }
+    // Add all items at once to inventory
+    setInventory(prev => {
+      const newInv = [...prev];
+      let added = 0;
+      
+      // Find empty slots and add items
+      for (let i = 0; i < 27 && added < count; i++) {
+        if (!newInv[i]) {
+          newInv[i] = itemId;
+          added++;
         }
-        // If inventory is full, try hotbar
+      }
+      
+      // Update ref
+      inventoryRef.current = newInv;
+      
+      // If we couldn't add all items to inventory, add remaining to hotbar
+      if (added < count) {
+        const remaining = count - added;
         setHotbar(prevHotbar => {
           const newHotbar = [...prevHotbar];
-          for (let i = 0; i < 9; i++) {
+          let hotbarAdded = 0;
+          
+          for (let i = 0; i < 9 && hotbarAdded < remaining; i++) {
             if (!newHotbar[i]) {
               newHotbar[i] = itemId;
-              return newHotbar;
+              hotbarAdded++;
             }
           }
-          return prevHotbar;
+          
+          hotbarRef.current = newHotbar;
+          return newHotbar;
         });
-        return prev;
-      });
-    }
+      }
+      
+      return newInv;
+    });
+    
     showNotif(`+${count} ${itemData.name}`);
   }, [showNotif]);
 
   const removeItem = useCallback((itemId: string, count: number = 1): boolean => {
-    let removed = 0;
-    
-    // Remove from inventory first
+    // Remove from inventory
     setInventory(prev => {
       const newInv = [...prev];
+      let removed = 0;
+      
       for (let i = 0; i < 27 && removed < count; i++) {
         if (newInv[i] === itemId) {
           newInv[i] = null;
           removed++;
         }
       }
-      return newInv;
-    });
-    
-    // If we still need to remove more, remove from hotbar
-    if (removed < count) {
-      setHotbar(prev => {
-        const newHotbar = [...prev];
-        for (let i = 0; i < 9 && removed < count; i++) {
+      
+      inventoryRef.current = newInv;
+      
+      // If we removed all items, return
+      if (removed >= count) {
+        return newInv;
+      }
+      
+      // Otherwise, remove remaining from hotbar
+      const remaining = count - removed;
+      setHotbar(prevHotbar => {
+        const newHotbar = [...prevHotbar];
+        let hotbarRemoved = 0;
+        
+        for (let i = 0; i < 9 && hotbarRemoved < remaining; i++) {
           if (newHotbar[i] === itemId) {
             newHotbar[i] = null;
-            removed++;
+            hotbarRemoved++;
           }
         }
+        
+        hotbarRef.current = newHotbar;
         return newHotbar;
       });
-    }
+      
+      return newInv;
+    });
     
     return true;
   }, []);
@@ -457,17 +481,88 @@ function App() {
       return;
     }
     
-    // Remove ingredients
-    recipe.ingredients.forEach(ing => removeItem(ing.item, ing.count));
+    // Remove all ingredients at once
+    setInventory(prev => {
+      const newInv = [...prev];
+      
+      // Remove each ingredient
+      recipe.ingredients.forEach(ing => {
+        let removed = 0;
+        for (let i = 0; i < 27 && removed < ing.count; i++) {
+          if (newInv[i] === ing.item) {
+            newInv[i] = null;
+            removed++;
+          }
+        }
+        
+        // If we couldn't remove all from inventory, remove from hotbar
+        if (removed < ing.count) {
+          const remaining = ing.count - removed;
+          setHotbar(prevHotbar => {
+            const newHotbar = [...prevHotbar];
+            let hotbarRemoved = 0;
+            
+            for (let i = 0; i < 9 && hotbarRemoved < remaining; i++) {
+              if (newHotbar[i] === ing.item) {
+                newHotbar[i] = null;
+                hotbarRemoved++;
+              }
+            }
+            
+            hotbarRef.current = newHotbar;
+            return newHotbar;
+          });
+        }
+      });
+      
+      inventoryRef.current = newInv;
+      return newInv;
+    });
     
     // Add result
     const resultData = ITEM_TYPES[recipe.result.item];
     if (resultData?.durability) {
       setToolDurability(prev => ({ ...prev, [recipe.result.item]: resultData.durability! }));
     }
-    addItem(recipe.result.item, recipe.result.count);
+    
+    // Add result items
+    setInventory(prev => {
+      const newInv = [...prev];
+      let added = 0;
+      
+      for (let i = 0; i < 27 && added < recipe.result.count; i++) {
+        if (!newInv[i]) {
+          newInv[i] = recipe.result.item;
+          added++;
+        }
+      }
+      
+      inventoryRef.current = newInv;
+      
+      // If we couldn't add all to inventory, add to hotbar
+      if (added < recipe.result.count) {
+        const remaining = recipe.result.count - added;
+        setHotbar(prevHotbar => {
+          const newHotbar = [...prevHotbar];
+          let hotbarAdded = 0;
+          
+          for (let i = 0; i < 9 && hotbarAdded < remaining; i++) {
+            if (!newHotbar[i]) {
+              newHotbar[i] = recipe.result.item;
+              hotbarAdded++;
+            }
+          }
+          
+          hotbarRef.current = newHotbar;
+          return newHotbar;
+        });
+      }
+      
+      return newInv;
+    });
+    
     showNotif(`🔨 Создано: ${recipe.name} x${recipe.result.count}`);
-  }, [removeItem, addItem, showNotif]);
+  }, [showNotif]);
 
   const handlePortalActivated = useCallback(() => {
     if (!portalActivated && countItem('portal_key') > 0) {
