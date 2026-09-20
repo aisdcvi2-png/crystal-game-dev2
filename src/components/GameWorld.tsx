@@ -5,7 +5,7 @@ import { BLOCK_TYPES, ITEM_TYPES, WORLD_SIZE, WORLD_HEIGHT, generateWorld, getSu
 interface GameWorldProps {
   crystalsCollected: number;
   totalCrystals: number;
-  onCrystalCollected: (crystalId: number) => void;
+  onCrystalFound: (crystalId: number) => void;
   playerPosition: React.MutableRefObject<THREE.Vector3>;
   availableCrystals: number[];
   onBreakProgress: (progress: number, maxHealth: number, blockName: string) => void;
@@ -13,16 +13,18 @@ interface GameWorldProps {
   selectedSlot: number;
   hotbar: (string | null)[];
   onPlaceBlock: (x: number, y: number, z: number) => void;
+  onCrystalPickup: (crystalId: number) => void;
+  droppedCrystals: { id: number; x: number; y: number; z: number }[];
 }
 
 export default function GameWorld({
-  crystalsCollected, totalCrystals, onCrystalCollected, playerPosition,
-  availableCrystals, onBreakProgress, onBlockMined, selectedSlot, hotbar, onPlaceBlock
+  crystalsCollected, totalCrystals, onCrystalFound, playerPosition,
+  availableCrystals, onBreakProgress, onBlockMined, selectedSlot, hotbar,
+  onPlaceBlock, onCrystalPickup, droppedCrystals
 }: GameWorldProps) {
   const mountRef = useRef<HTMLDivElement>(null);
   const keysRef = useRef<{ [key: string]: boolean }>({});
   const velocityRef = useRef(new THREE.Vector3());
-  const isJumpingRef = useRef(false);
   const animFrameRef = useRef<number>(0);
   const mouseRef = useRef({ locked: false, leftDown: false, rightDown: false });
   const eulerRef = useRef(new THREE.Euler(0, 0, 0, 'YXZ'));
@@ -32,20 +34,87 @@ export default function GameWorld({
   const blockMeshesRef = useRef<Map<string, THREE.Mesh>>(new Map());
   const raycasterRef = useRef(new THREE.Raycaster());
   const swingCooldownRef = useRef(0);
-  const currentBreakRef = useRef<{ key: string; progress: number } | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
-  const crystalDropCountRef = useRef(0);
   const particlesRef = useRef<THREE.Points[]>([]);
   const onGroundRef = useRef(false);
   const hotbarRef = useRef(hotbar);
   const selectedSlotRef = useRef(selectedSlot);
   const onPlaceBlockRef = useRef(onPlaceBlock);
+  const onCrystalPickupRef = useRef(onCrystalPickup);
+  const droppedCrystalsRef = useRef(droppedCrystals);
+  const crystalMeshesRef = useRef<Map<number, THREE.Group>>(new Map());
+  const placeCooldownRef = useRef(0);
 
   // Keep refs updated
   useEffect(() => { hotbarRef.current = hotbar; }, [hotbar]);
   useEffect(() => { selectedSlotRef.current = selectedSlot; }, [selectedSlot]);
   useEffect(() => { onPlaceBlockRef.current = onPlaceBlock; }, [onPlaceBlock]);
+  useEffect(() => { onCrystalPickupRef.current = onCrystalPickup; }, [onCrystalPickup]);
+  useEffect(() => { droppedCrystalsRef.current = droppedCrystals; }, [droppedCrystals]);
+
+  // Release pointer lock when needed (e.g. question shown)
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.hidden && document.pointerLockElement) {
+        document.exitPointerLock();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, []);
+
+  // Sync dropped crystals with 3D scene
+  useEffect(() => {
+    const scene = sceneRef.current;
+    if (!scene) return;
+
+    // Remove meshes for crystals no longer dropped
+    crystalMeshesRef.current.forEach((mesh, id) => {
+      if (!droppedCrystals.find(c => c.id === id)) {
+        scene.remove(mesh);
+        crystalMeshesRef.current.delete(id);
+      }
+    });
+
+    // Add meshes for new dropped crystals
+    droppedCrystals.forEach(crystal => {
+      if (!crystalMeshesRef.current.has(crystal.id)) {
+        const group = new THREE.Group();
+        
+        // Crystal body
+        const crystalGeo = new THREE.OctahedronGeometry(0.35, 0);
+        const crystalMat = new THREE.MeshPhongMaterial({
+          color: 0xE040FB,
+          emissive: 0xE040FB,
+          emissiveIntensity: 0.6,
+          transparent: true,
+          opacity: 0.9,
+          shininess: 150,
+        });
+        const crystalMesh = new THREE.Mesh(crystalGeo, crystalMat);
+        group.add(crystalMesh);
+
+        // Glow
+        const glowGeo = new THREE.SphereGeometry(0.6, 16, 16);
+        const glowMat = new THREE.MeshBasicMaterial({
+          color: 0xE040FB,
+          transparent: true,
+          opacity: 0.2,
+        });
+        const glow = new THREE.Mesh(glowGeo, glowMat);
+        group.add(glow);
+
+        // Light
+        const light = new THREE.PointLight(0xE040FB, 1, 5);
+        group.add(light);
+
+        group.position.set(crystal.x + 0.5, crystal.y + 0.8, crystal.z + 0.5);
+        scene.add(group);
+        crystalMeshesRef.current.set(crystal.id, group);
+      }
+    });
+  }, [droppedCrystals]);
 
   const getBlockKey = (x: number, y: number, z: number) => `${x},${y},${z}`;
 
@@ -53,34 +122,26 @@ export default function GameWorld({
     const blockType = BLOCK_TYPES[type];
     const geo = new THREE.BoxGeometry(1, 1, 1);
     
-    let mat: THREE.Material;
+    let mesh: THREE.Mesh;
     if (blockType.topColor && blockType.sideColor) {
-      // Multi-face material (like grass)
       const materials = [
-        new THREE.MeshLambertMaterial({ color: blockType.sideColor }), // right
-        new THREE.MeshLambertMaterial({ color: blockType.sideColor }), // left
-        new THREE.MeshLambertMaterial({ color: blockType.topColor }),  // top
-        new THREE.MeshLambertMaterial({ color: blockType.sideColor }), // bottom
-        new THREE.MeshLambertMaterial({ color: blockType.sideColor }), // front
-        new THREE.MeshLambertMaterial({ color: blockType.sideColor }), // back
+        new THREE.MeshLambertMaterial({ color: blockType.sideColor }),
+        new THREE.MeshLambertMaterial({ color: blockType.sideColor }),
+        new THREE.MeshLambertMaterial({ color: blockType.topColor }),
+        new THREE.MeshLambertMaterial({ color: blockType.sideColor }),
+        new THREE.MeshLambertMaterial({ color: blockType.sideColor }),
+        new THREE.MeshLambertMaterial({ color: blockType.sideColor }),
       ];
-      const mesh = new THREE.Mesh(geo, materials);
-      mesh.position.set(x + 0.5, y + 0.5, z + 0.5);
-      mesh.castShadow = !blockType.transparent;
-      mesh.receiveShadow = true;
-      mesh.userData = { blockType: type, x, y, z };
-      scene.add(mesh);
-      return mesh;
+      mesh = new THREE.Mesh(geo, materials);
     } else {
-      const color = blockType.color;
-      mat = new THREE.MeshLambertMaterial({ 
-        color,
+      const mat = new THREE.MeshLambertMaterial({ 
+        color: blockType.color,
         transparent: blockType.transparent || false,
         opacity: blockType.transparent ? 0.5 : 1,
       });
+      mesh = new THREE.Mesh(geo, mat);
     }
     
-    const mesh = new THREE.Mesh(geo, mat);
     mesh.position.set(x + 0.5, y + 0.5, z + 0.5);
     mesh.castShadow = !blockType.transparent;
     mesh.receiveShadow = true;
@@ -109,7 +170,7 @@ export default function GameWorld({
     renderer.toneMappingExposure = 1.2;
     mountRef.current.appendChild(renderer.domElement);
 
-    // === LIGHTING — bright daylight ===
+    // === BRIGHT LIGHTING ===
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
     scene.add(ambientLight);
 
@@ -133,16 +194,12 @@ export default function GameWorld({
     const worldData = generateWorld();
     worldDataRef.current = worldData;
 
-    // Create block meshes — only visible blocks (not surrounded on all sides)
-    const sharedGeo = new THREE.BoxGeometry(1, 1, 1);
-    
     for (let x = 0; x < WORLD_SIZE; x++) {
       for (let z = 0; z < WORLD_SIZE; z++) {
         for (let y = 0; y < WORLD_HEIGHT; y++) {
           const block = worldData[x][z][y];
           if (!block) continue;
 
-          // Check if block is visible (has at least one exposed face)
           const neighbors = [
             worldData[x+1]?.[z]?.[y],
             worldData[x-1]?.[z]?.[y],
@@ -164,22 +221,18 @@ export default function GameWorld({
 
     // === PICKAXE ===
     const pickaxe = new THREE.Group();
-    
-    // Handle
     const handleGeo = new THREE.BoxGeometry(0.06, 0.55, 0.06);
     const handleMat = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
     const handle = new THREE.Mesh(handleGeo, handleMat);
     handle.position.set(0, -0.1, 0);
     pickaxe.add(handle);
 
-    // Head
     const headGeo = new THREE.BoxGeometry(0.3, 0.08, 0.08);
     const headMat = new THREE.MeshPhongMaterial({ color: 0x888888, shininess: 80 });
     const head = new THREE.Mesh(headGeo, headMat);
     head.position.set(0.1, 0.18, 0);
     pickaxe.add(head);
 
-    // Binding
     const bindGeo = new THREE.BoxGeometry(0.09, 0.04, 0.09);
     const bindMat = new THREE.MeshLambertMaterial({ color: 0x5D4037 });
     const bind = new THREE.Mesh(bindGeo, bindMat);
@@ -192,7 +245,7 @@ export default function GameWorld({
     scene.add(camera);
     pickaxeRef.current = pickaxe;
 
-    // === SET PLAYER POSITION ===
+    // === PLAYER SPAWN ===
     const spawnX = Math.floor(WORLD_SIZE / 2);
     const spawnZ = Math.floor(WORLD_SIZE / 2);
     const spawnY = getSurfaceHeight(worldData, spawnX, spawnZ) + 2;
@@ -220,7 +273,6 @@ export default function GameWorld({
     const handleMouseUp = (e: MouseEvent) => {
       if (e.button === 0) {
         mouseRef.current.leftDown = false;
-        currentBreakRef.current = null;
         onBreakProgress(0, 1, '');
       }
       if (e.button === 2) mouseRef.current.rightDown = false;
@@ -228,7 +280,11 @@ export default function GameWorld({
     
     const handleContextMenu = (e: Event) => e.preventDefault();
     
-    const handleClick = () => { renderer.domElement.requestPointerLock(); };
+    const handleClick = () => { 
+      if (!document.pointerLockElement) {
+        renderer.domElement.requestPointerLock();
+      }
+    };
     const handlePointerLockChange = () => {
       mouseRef.current.locked = document.pointerLockElement === renderer.domElement;
     };
@@ -294,16 +350,7 @@ export default function GameWorld({
       particlesRef.current.push(points);
     };
 
-    const getToolSpeed = (): number => {
-      const item = hotbar[selectedSlot];
-      if (!item) return 1;
-      const itemData = ITEM_TYPES[item];
-      return itemData?.toolSpeed || 1;
-    };
-
     // === ANIMATION LOOP ===
-    let placeCooldown = 0;
-    
     const animate = () => {
       animFrameRef.current = requestAnimationFrame(animate);
       const time = Date.now() * 0.001;
@@ -326,23 +373,18 @@ export default function GameWorld({
       velocityRef.current.x = direction.x * speed;
       velocityRef.current.z = direction.z * speed;
 
-      // Jump
       if (keysRef.current['Space'] && onGroundRef.current) {
         velocityRef.current.y = 0.16;
         onGroundRef.current = false;
       }
 
-      // Gravity
       velocityRef.current.y -= 0.007;
       
-      // Apply movement with collision
       const newX = camera.position.x + velocityRef.current.x;
       const newY = camera.position.y + velocityRef.current.y;
       const newZ = camera.position.z + velocityRef.current.z;
 
-      // Simple collision - check block at feet level
       const feetY = Math.floor(newY - 1.5);
-      const headY = Math.floor(newY + 0.2);
       const px = Math.floor(newX);
       const pz = Math.floor(newZ);
 
@@ -377,7 +419,6 @@ export default function GameWorld({
         camera.position.z = Math.max(0.5, Math.min(WORLD_SIZE - 0.5, newZ));
       }
 
-      // Y collision
       camera.position.y = newY;
       if (velocityRef.current.y < 0) {
         const groundCheck = Math.floor(camera.position.y - 1.6);
@@ -393,7 +434,6 @@ export default function GameWorld({
         }
       }
 
-      // Ceiling collision
       if (velocityRef.current.y > 0) {
         const ceilCheck = Math.floor(camera.position.y + 0.3);
         const cpx2 = Math.floor(camera.position.x);
@@ -406,7 +446,6 @@ export default function GameWorld({
         }
       }
 
-      // Prevent falling into void
       if (camera.position.y < -5) {
         const sx = Math.floor(WORLD_SIZE / 2);
         const sz = Math.floor(WORLD_SIZE / 2);
@@ -447,19 +486,16 @@ export default function GameWorld({
         if (intersects.length > 0) {
           const hit = intersects[0];
           const mesh = hit.object as THREE.Mesh;
-          const { x, y, z, blockType } = mesh.userData;
-          const key = getBlockKey(x, y, z);
+          const { x, y, z } = mesh.userData;
           const blockData = worldData[x]?.[z]?.[y];
           
           if (blockData && !BLOCK_TYPES[blockData.type]?.unbreakable) {
             if (swingCooldownRef.current <= 0) {
-              // Start swing
               if (!pickaxeSwingRef.current.swinging) {
                 pickaxeSwingRef.current.swinging = true;
                 pickaxeSwingRef.current.time = 0;
                 swingCooldownRef.current = 0.25;
 
-                // Get tool speed
                 const selectedItem = hotbarRef.current[selectedSlotRef.current];
                 let toolSpeed = 1;
                 if (selectedItem) {
@@ -467,39 +503,26 @@ export default function GameWorld({
                   if (itemData?.toolSpeed) toolSpeed = itemData.toolSpeed;
                 }
 
-                // Damage block
                 blockData.health -= toolSpeed;
                 
-                // Visual feedback
                 const blockTypeData = BLOCK_TYPES[blockData.type];
                 const damageRatio = 1 - (blockData.health / blockData.maxHealth);
                 
-                // Darken block
                 if (mesh.material && !Array.isArray(mesh.material)) {
                   const baseColor = new THREE.Color(blockTypeData.color);
                   baseColor.lerp(new THREE.Color(0x222222), damageRatio * 0.5);
                   (mesh.material as THREE.MeshLambertMaterial).color = baseColor;
                 }
 
-                // Particles
                 createParticles(hit.point, blockTypeData.color);
-
-                // Update progress
                 onBreakProgress(blockData.maxHealth - blockData.health, blockData.maxHealth, blockTypeData.name);
 
-                // Check if broken
                 if (blockData.health <= 0) {
-                  // Block destroyed!
                   const pos = new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5);
                   createParticles(pos, blockTypeData.color);
-                  
                   removeBlock(x, y, z);
                   revealNeighbors(x, y, z);
-                  
-                  // Notify about mined block
                   onBlockMined(blockData.type, x, y, z);
-                  
-                  currentBreakRef.current = null;
                   onBreakProgress(0, 1, '');
                 }
               }
@@ -509,7 +532,7 @@ export default function GameWorld({
       }
 
       // === PLACE BLOCK (right click) ===
-      if (mouseRef.current.rightDown && mouseRef.current.locked && placeCooldown <= 0) {
+      if (mouseRef.current.rightDown && mouseRef.current.locked && placeCooldownRef.current <= 0) {
         const selectedItem = hotbarRef.current[selectedSlotRef.current];
         if (selectedItem) {
           const itemData = ITEM_TYPES[selectedItem];
@@ -536,7 +559,6 @@ export default function GameWorld({
                     const playerBlockY = Math.floor(camera.position.y - 1);
                     const playerBlockZ = Math.floor(camera.position.z);
                     if (!(px === playerBlockX && pz === playerBlockZ && (py === playerBlockY || py === playerBlockY + 1))) {
-                      // Place block in world data
                       const blockId = itemData.blockId;
                       worldData[px][pz][py] = {
                         type: blockId,
@@ -545,9 +567,8 @@ export default function GameWorld({
                       };
                       const newMesh = createBlockMesh(scene, blockId, px, py, pz);
                       blockMeshesRef.current.set(getBlockKey(px, py, pz), newMesh);
-                      
                       onPlaceBlockRef.current(px, py, pz);
-                      placeCooldown = 0.3;
+                      placeCooldownRef.current = 0.3;
                     }
                   }
                 }
@@ -557,8 +578,22 @@ export default function GameWorld({
         }
       }
 
-      if (placeCooldown > 0) placeCooldown -= dt;
+      if (placeCooldownRef.current > 0) placeCooldownRef.current -= dt;
       if (swingCooldownRef.current > 0) swingCooldownRef.current -= dt;
+
+      // === CRYSTAL PICKUP ===
+      droppedCrystalsRef.current.forEach(crystal => {
+        const dist = camera.position.distanceTo(new THREE.Vector3(crystal.x + 0.5, crystal.y + 0.8, crystal.z + 0.5));
+        if (dist < 2) {
+          onCrystalPickupRef.current(crystal.id);
+        }
+      });
+
+      // === ANIMATE CRYSTALS ===
+      crystalMeshesRef.current.forEach((group) => {
+        group.rotation.y += 0.03;
+        group.position.y += Math.sin(time * 3) * 0.003;
+      });
 
       // === UPDATE PARTICLES ===
       particlesRef.current = particlesRef.current.filter(p => {

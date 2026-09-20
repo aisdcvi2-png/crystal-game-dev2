@@ -12,11 +12,12 @@ interface HUDProps {
   hotbar: (string | null)[];
   selectedSlot: number;
   notification: string | null;
+  crystalNotification: string | null;
 }
 
 export default function HUD({
   crystalsCollected, totalCrystals, questionsAnswered, correctAnswers,
-  currentSubject, onStartQuestion, breakProgress, hotbar, selectedSlot, notification
+  currentSubject, onStartQuestion, breakProgress, hotbar, selectedSlot, notification, crystalNotification
 }: HUDProps) {
   const subject = subjects.find(s => s.name === currentSubject);
 
@@ -98,6 +99,15 @@ export default function HUD({
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 animate-bounce">
           <div className="bg-gray-900/95 backdrop-blur-sm border border-green-500/50 rounded-xl px-6 py-3">
             <div className="text-green-300 font-bold text-sm">{notification}</div>
+          </div>
+        </div>
+      )}
+
+      {/* Crystal Notification */}
+      {crystalNotification && (
+        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 animate-pulse">
+          <div className="bg-purple-900/95 backdrop-blur-sm border-2 border-purple-400 rounded-xl px-8 py-4 shadow-lg shadow-purple-500/50">
+            <div className="text-purple-200 font-bold text-lg">{crystalNotification}</div>
           </div>
         </div>
       )}

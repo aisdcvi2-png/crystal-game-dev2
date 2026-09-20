@@ -4,22 +4,107 @@ import { ITEM_TYPES, CRAFT_RECIPES, CraftRecipe } from '../data/gameData';
 interface InventoryProps {
   hotbar: (string | null)[];
   inventory: (string | null)[];
+  setHotbar: (hotbar: (string | null)[]) => void;
+  setInventory: (inventory: (string | null)[]) => void;
   onCraft: (recipeId: string) => void;
   onClose: () => void;
   countItem: (itemId: string) => number;
 }
 
-export default function Inventory({ hotbar, inventory, onCraft, onClose, countItem }: InventoryProps) {
+export default function Inventory({ hotbar, inventory, setHotbar, setInventory, onCraft, onClose, countItem }: InventoryProps) {
   const [activeTab, setActiveTab] = useState<'inventory' | 'craft'>('inventory');
   const [craftCategory, setCraftCategory] = useState<'tools' | 'materials' | 'building'>('tools');
+  const [selectedItem, setSelectedItem] = useState<{ item: string; from: 'hotbar' | 'inventory'; index: number } | null>(null);
+
+  const handleSlotClick = (item: string | null, index: number, from: 'hotbar' | 'inventory') => {
+    if (!item) {
+      // Empty slot - place selected item here
+      if (selectedItem) {
+        if (from === 'hotbar') {
+          const newHotbar = [...hotbar];
+          newHotbar[index] = selectedItem.item;
+          setHotbar(newHotbar);
+          
+          // Remove from original location
+          if (selectedItem.from === 'hotbar') {
+            const newHotbar2 = [...hotbar];
+            newHotbar2[selectedItem.index] = null;
+            newHotbar2[index] = selectedItem.item;
+            setHotbar(newHotbar2);
+          } else {
+            const newInventory = [...inventory];
+            newInventory[selectedItem.index] = null;
+            setInventory(newInventory);
+            const newHotbar2 = [...hotbar];
+            newHotbar2[index] = selectedItem.item;
+            setHotbar(newHotbar2);
+          }
+        } else {
+          const newInventory = [...inventory];
+          newInventory[index] = selectedItem.item;
+          setInventory(newInventory);
+          
+          // Remove from original location
+          if (selectedItem.from === 'hotbar') {
+            const newHotbar = [...hotbar];
+            newHotbar[selectedItem.index] = null;
+            setHotbar(newHotbar);
+          } else {
+            const newInventory2 = [...inventory];
+            newInventory2[selectedItem.index] = null;
+            newInventory2[index] = selectedItem.item;
+            setInventory(newInventory2);
+          }
+        }
+        setSelectedItem(null);
+      }
+    } else {
+      // Occupied slot - select or swap
+      if (selectedItem) {
+        // Swap items
+        if (selectedItem.from === 'hotbar' && from === 'hotbar') {
+          const newHotbar = [...hotbar];
+          newHotbar[selectedItem.index] = item;
+          newHotbar[index] = selectedItem.item;
+          setHotbar(newHotbar);
+        } else if (selectedItem.from === 'inventory' && from === 'inventory') {
+          const newInventory = [...inventory];
+          newInventory[selectedItem.index] = item;
+          newInventory[index] = selectedItem.item;
+          setInventory(newInventory);
+        } else if (selectedItem.from === 'hotbar' && from === 'inventory') {
+          const newHotbar = [...hotbar];
+          newHotbar[selectedItem.index] = item;
+          setHotbar(newHotbar);
+          const newInventory = [...inventory];
+          newInventory[index] = selectedItem.item;
+          setInventory(newInventory);
+        } else {
+          const newInventory = [...inventory];
+          newInventory[selectedItem.index] = item;
+          setInventory(newInventory);
+          const newHotbar = [...hotbar];
+          newHotbar[index] = selectedItem.item;
+          setHotbar(newHotbar);
+        }
+        setSelectedItem(null);
+      } else {
+        // Select this item
+        setSelectedItem({ item, from, index });
+      }
+    }
+  };
 
   const renderSlot = (item: string | null, index: number, isHotbar: boolean = false) => {
     const itemData = item ? ITEM_TYPES[item] : null;
+    const isSelected = selectedItem && selectedItem.item === item && selectedItem.from === (isHotbar ? 'hotbar' : 'inventory') && selectedItem.index === index;
     
     return (
       <div
         key={`${isHotbar ? 'h' : 'i'}-${index}`}
+        onClick={() => handleSlotClick(item, index, isHotbar ? 'hotbar' : 'inventory')}
         className={`w-14 h-14 rounded-lg border-2 flex items-center justify-center relative cursor-pointer transition-all
+          ${isSelected ? 'border-yellow-400 bg-yellow-900/30 scale-110' : ''}
           ${isHotbar ? 'border-amber-500/50 bg-gray-800/80' : 'border-gray-600/50 bg-gray-800/60'}
           hover:border-white/50 hover:bg-gray-700/80`}
         title={itemData ? `${itemData.name}` : 'Пусто'}
@@ -82,6 +167,13 @@ export default function Inventory({ hotbar, inventory, onCraft, onClose, countIt
 
         {activeTab === 'inventory' && (
           <div>
+            {/* Instructions */}
+            <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-3 mb-4">
+              <p className="text-blue-300 text-sm">
+                💡 Кликни на предмет чтобы взять, затем кликни на слот чтобы положить. Можно менять местами!
+              </p>
+            </div>
+
             {/* Hotbar */}
             <div className="mb-4">
               <h3 className="text-amber-400 font-bold mb-2 text-sm">⚡ Быстрый доступ (1-9)</h3>
