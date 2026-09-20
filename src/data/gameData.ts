@@ -28,7 +28,7 @@ export interface CraftRecipe {
   description: string;
   ingredients: { item: string; count: number }[];
   result: { item: string; count: number };
-  category: 'tools' | 'materials' | 'building';
+  category: 'tools' | 'materials' | 'building' | 'special';
   requiresQuestion?: boolean;
 }
 
@@ -66,6 +66,7 @@ export const ITEM_TYPES: Record<string, ItemType> = {
   iron_ore_item: { id: 'iron_ore_item', name: 'Железная руда', description: 'Нужно переплавить', category: 'material', stackSize: 64 },
   gold_ore_item: { id: 'gold_ore_item', name: 'Золотая руда', description: 'Нужно переплавить', category: 'material', stackSize: 64 },
   crystal: { id: 'crystal', name: 'Кристалл', description: 'Магический кристалл!', category: 'special', stackSize: 64 },
+  portal_key: { id: 'portal_key', name: 'Ключ портала', description: 'Открывает портал в новый мир!', category: 'special', stackSize: 1 },
   oak_log_item: { id: 'oak_log_item', name: 'Древесина', description: 'Бревно дуба', category: 'material', stackSize: 64 },
   
   wood_pickaxe: { id: 'wood_pickaxe', name: 'Деревянная кирка', description: 'Прочность: 60', category: 'tool', stackSize: 1, durability: TOOL_DURABILITY.wood },
@@ -87,6 +88,7 @@ export const CRAFT_RECIPES: CraftRecipe[] = [
   { id: 'stone_pickaxe', name: 'Каменная кирка', description: 'Крепкая кирка', ingredients: [{ item: 'cobblestone', count: 3 }, { item: 'stick', count: 2 }], result: { item: 'stone_pickaxe', count: 1 }, category: 'tools', requiresQuestion: true },
   { id: 'iron_pickaxe', name: 'Железная кирка', description: 'Продвинутая кирка', ingredients: [{ item: 'iron_ingot', count: 3 }, { item: 'stick', count: 2 }], result: { item: 'iron_pickaxe', count: 1 }, category: 'tools', requiresQuestion: true },
   { id: 'diamond_pickaxe', name: 'Алмазная кирка', description: 'Лучшая кирка!', ingredients: [{ item: 'diamond', count: 3 }, { item: 'stick', count: 2 }], result: { item: 'diamond_pickaxe', count: 1 }, category: 'tools', requiresQuestion: true },
+  { id: 'portal_key', name: 'Ключ портала', description: 'Нужно 20 кристаллов и 5 алмазов!', ingredients: [{ item: 'crystal', count: 20 }, { item: 'diamond', count: 5 }], result: { item: 'portal_key', count: 1 }, category: 'special' },
 ];
 
 // World generation

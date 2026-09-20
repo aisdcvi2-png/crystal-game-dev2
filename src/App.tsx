@@ -5,7 +5,7 @@ import { questions, subjects, Question } from './data/questions';
 import { BLOCK_TYPES, ITEM_TYPES, CRAFT_RECIPES, TOOL_DURABILITY } from './data/gameData';
 import ItemIcon from './components/ItemIcon';
 
-type GameState = 'start' | 'playing' | 'question' | 'win';
+type GameState = 'start' | 'playing' | 'question' | 'win' | 'victory';
 interface DroppedCrystal { id: number; x: number; y: number; z: number; }
 
 // ============ QUESTION MODAL ============
@@ -106,7 +106,7 @@ function StartScreen({ onStart }: { onStart: () => void }) {
         </div>
         <div className="bg-gray-900/70 backdrop-blur-sm border border-green-500/30 rounded-2xl p-5 mb-6">
           <p className="text-gray-200 text-base leading-relaxed mb-4">
-            Копай блоки киркой, находи кристаллы в руде! Чтобы получить кристалл — ответь правильно на вопрос по школьной программе 2 класса.
+            Копай блоки киркой, находи кристаллы в руде! Чтобы получить кристалл — ответь правильно на вопрос по школьной программе 2 класса. Собери 20 кристаллов и 5 алмазов, скрафти ключ портала и найди портал в углу карты!
           </p>
           <div className="grid grid-cols-5 gap-3">
             {subjects.map(s => (
@@ -171,6 +171,7 @@ function App() {
   const [pendingCrystalId, setPendingCrystalId] = useState<number | null>(null);
   const [toolDurability, setToolDurability] = useState<Record<string, number>>({ wood_pickaxe: TOOL_DURABILITY.wood });
   const [dragItem, setDragItem] = useState<{ item: string; from: 'hotbar' | 'inventory'; index: number } | null>(null);
+  const [portalActivated, setPortalActivated] = useState(false);
 
   const playerPosition = useRef(new THREE.Vector3(0, 3, 0));
   const subjectIndexRef = useRef(0);
@@ -348,6 +349,13 @@ function App() {
     showNotif(`🔨 Создано: ${recipe.name} x${recipe.result.count}`);
   }, [countItem, removeItem, addItem, showNotif]);
 
+  const handlePortalActivated = useCallback(() => {
+    if (!portalActivated && countItem('portal_key') > 0) {
+      setPortalActivated(true);
+      setGameState('victory');
+    }
+  }, [portalActivated, countItem]);
+
   const handleRestart = () => {
     setGameState('start');
     setCrystalsCollected(0); setCurrentQuestion(null); setAnsweredIds([]); setCorrectAnswers(0);
@@ -356,6 +364,7 @@ function App() {
     setInventory(['oak_log_item', 'oak_log_item', 'oak_log_item', ...Array(24).fill(null)]);
     setSelectedSlot(0); setDroppedCrystals([]); setPendingCrystalId(null);
     setToolDurability({ wood_pickaxe: TOOL_DURABILITY.wood }); subjectIndexRef.current = 0;
+    setPortalActivated(false);
   };
 
   // Keyboard handler
@@ -437,6 +446,8 @@ function App() {
             onPlaceBlock={handlePlaceBlock}
             onCrystalPickup={handleCrystalPickup}
             droppedCrystals={droppedCrystals}
+            onPortalActivated={handlePortalActivated}
+            hasPortalKey={countItem('portal_key') > 0}
           />
 
           {/* HUD */}
@@ -476,18 +487,22 @@ function App() {
               </div>
             )}
 
-            {/* Subject indicator */}
-            {currentSubject && !breakProgress && (
-              <div className="absolute top-20 left-1/2 -translate-x-1/2 pointer-events-auto">
-                <div className="bg-gray-900/90 backdrop-blur-sm border-2 border-yellow-500/50 rounded-xl px-6 py-3 text-center">
-                  <div className="text-2xl mb-1">{subjects.find(s => s.name === currentSubject)?.icon}</div>
-                  <div className="text-yellow-300 font-bold text-xs">Следующий: {currentSubject}</div>
-                  <button onClick={handleStartQuestion} className="mt-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white px-3 py-1.5 rounded-lg font-bold text-xs hover:from-purple-500 hover:to-pink-500 transition-all transform hover:scale-105 active:scale-95">
-                    📝 Ответить
-                  </button>
+            {/* Portal objective */}
+            <div className="absolute top-20 right-4 pointer-events-auto">
+              <div className="bg-gray-900/90 backdrop-blur-sm border border-purple-500/50 rounded-xl px-4 py-2">
+                <div className="text-purple-300 text-xs font-bold mb-1">🎯 Цель:</div>
+                <div className="text-white text-xs">
+                  {countItem('portal_key') > 0 
+                    ? '🌀 Найди портал!' 
+                    : `💎 ${crystalsCollected}/20 кристаллов`}
                 </div>
+                {countItem('portal_key') === 0 && (
+                  <div className="text-gray-400 text-[10px] mt-1">
+                    Собери 20💎 + 5💎 для ключа
+                  </div>
+                )}
               </div>
-            )}
+            </div>
 
             {/* Notifications */}
             {notification && (
@@ -657,6 +672,26 @@ function App() {
 
       {gameState === 'win' && (
         <WinScreen crystalsCollected={crystalsCollected} correctAnswers={correctAnswers} totalQuestions={answeredIds.length} onRestart={handleRestart} />
+      )}
+
+      {gameState === 'victory' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #1a0033, #4a0080, #1a0033)' }}>
+          <div className="text-center p-8 max-w-lg">
+            <div className="text-8xl mb-6 animate-bounce">🌀</div>
+            <h1 className="text-5xl font-bold text-white mb-4">ПОБЕДА!</h1>
+            <p className="text-xl text-purple-200 mb-6">Ты активировал портал в новый мир!</p>
+            <div className="bg-purple-900/50 rounded-2xl p-6 mb-6">
+              <div className="grid grid-cols-3 gap-4">
+                <div className="text-center"><div className="text-3xl font-bold text-purple-400">{crystalsCollected}</div><div className="text-sm text-gray-400">Кристаллов</div></div>
+                <div className="text-center"><div className="text-3xl font-bold text-green-400">{correctAnswers}</div><div className="text-sm text-gray-400">Правильных</div></div>
+                <div className="text-center"><div className="text-3xl font-bold text-yellow-400">{answeredIds.length}</div><div className="text-sm text-gray-400">Вопросов</div></div>
+              </div>
+            </div>
+            <button onClick={handleRestart} className="bg-gradient-to-r from-purple-600 to-pink-600 text-white text-xl font-bold px-10 py-4 rounded-2xl shadow-2xl transform hover:scale-105 transition-all">
+              🔄 Играть снова!
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

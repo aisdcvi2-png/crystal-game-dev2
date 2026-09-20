@@ -13,11 +13,13 @@ interface GameWorldProps {
   onPlaceBlock: (x: number, y: number, z: number) => void;
   onCrystalPickup: (crystalId: number) => void;
   droppedCrystals: { id: number; x: number; y: number; z: number }[];
+  onPortalActivated: () => void;
+  hasPortalKey: boolean;
 }
 
 export default function GameWorld({
   onCrystalFound, playerPosition, availableCrystals, onBreakProgress, onBlockMined,
-  selectedSlot, hotbar, onPlaceBlock, onCrystalPickup, droppedCrystals
+  selectedSlot, hotbar, onPlaceBlock, onCrystalPickup, droppedCrystals, onPortalActivated, hasPortalKey
 }: GameWorldProps) {
   const mountRef = useRef<HTMLDivElement>(null);
   const keysRef = useRef<{ [key: string]: boolean }>({});
@@ -41,6 +43,13 @@ export default function GameWorld({
   const droppedCrystalsRef = useRef(droppedCrystals);
   const crystalMeshesRef = useRef<Map<number, THREE.Group>>(new Map());
   const placeCooldownRef = useRef(0);
+  const particlesRef = useRef<Array<{ mesh: THREE.Mesh; velocity: THREE.Vector3; life: number }>>([]);
+  const portalMeshRef = useRef<THREE.Mesh | null>(null);
+  const hasPortalKeyRef = useRef(hasPortalKey);
+  const onPortalActivatedRef = useRef(onPortalActivated);
+
+  useEffect(() => { hasPortalKeyRef.current = hasPortalKey; }, [hasPortalKey]);
+  useEffect(() => { onPortalActivatedRef.current = onPortalActivated; }, [onPortalActivated]);
 
   useEffect(() => { hotbarRef.current = hotbar; }, [hotbar]);
   useEffect(() => { selectedSlotRef.current = selectedSlot; }, [selectedSlot]);
@@ -50,10 +59,58 @@ export default function GameWorld({
 
   const getBlockKey = (x: number, y: number, z: number) => `${x},${y},${z}`;
 
+  // Create textured material with pixel pattern
+  const createTexturedMaterial = useCallback((color: number): THREE.MeshLambertMaterial => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 16;
+    canvas.height = 16;
+    const ctx = canvas.getContext('2d')!;
+    
+    // Base color
+    ctx.fillStyle = `#${color.toString(16).padStart(6, '0')}`;
+    ctx.fillRect(0, 0, 16, 16);
+    
+    // Add pixel noise for texture
+    const baseR = (color >> 16) & 255;
+    const baseG = (color >> 8) & 255;
+    const baseB = color & 255;
+    
+    for (let px = 0; px < 16; px++) {
+      for (let py = 0; py < 16; py++) {
+        const noise = (Math.random() - 0.5) * 40;
+        const r = Math.max(0, Math.min(255, baseR + noise));
+        const g = Math.max(0, Math.min(255, baseG + noise));
+        const b = Math.max(0, Math.min(255, baseB + noise));
+        ctx.fillStyle = `rgb(${r},${g},${b})`;
+        ctx.fillRect(px, py, 1, 1);
+      }
+    }
+    
+    // Add grid lines for blocky look
+    ctx.strokeStyle = `rgba(0,0,0,0.2)`;
+    ctx.lineWidth = 0.5;
+    for (let i = 0; i <= 16; i += 4) {
+      ctx.beginPath();
+      ctx.moveTo(i, 0);
+      ctx.lineTo(i, 16);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(0, i);
+      ctx.lineTo(16, i);
+      ctx.stroke();
+    }
+    
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.magFilter = THREE.NearestFilter;
+    texture.minFilter = THREE.NearestFilter;
+    
+    return new THREE.MeshLambertMaterial({ map: texture });
+  }, []);
+
   const createBlockMesh = useCallback((scene: THREE.Scene, type: string, x: number, y: number, z: number): THREE.Mesh => {
     const blockType = BLOCK_TYPES[type];
     const geo = new THREE.BoxGeometry(1, 1, 1);
-    const mat = new THREE.MeshLambertMaterial({ color: blockType.color });
+    const mat = createTexturedMaterial(blockType.color);
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.set(x + 0.5, y + 0.5, z + 0.5);
     mesh.castShadow = true;
@@ -61,7 +118,7 @@ export default function GameWorld({
     mesh.userData = { blockType: type, x, y, z };
     scene.add(mesh);
     return mesh;
-  }, []);
+  }, [createTexturedMaterial]);
 
   const createWorld = useCallback(() => {
     if (!mountRef.current) return;
@@ -142,6 +199,27 @@ export default function GameWorld({
     camera.position.set(spawnX + 0.5, spawnY + 1.5, spawnZ + 0.5);
     playerPosition.current.copy(camera.position);
 
+    // Portal at corner of the world
+    const portalX = WORLD_SIZE - 5;
+    const portalZ = WORLD_SIZE - 5;
+    const portalY = getSurfaceHeight(worldData, portalX, portalZ) + 2;
+    
+    const portalGeo = new THREE.BoxGeometry(3, 4, 0.5);
+    const portalMat = new THREE.MeshBasicMaterial({ 
+      color: 0x9C27B0, 
+      transparent: true, 
+      opacity: 0.7,
+    });
+    const portalMesh = new THREE.Mesh(portalGeo, portalMat);
+    portalMesh.position.set(portalX + 0.5, portalY, portalZ + 0.5);
+    scene.add(portalMesh);
+    portalMeshRef.current = portalMesh;
+
+    // Portal glow
+    const portalLight = new THREE.PointLight(0x9C27B0, 2, 10);
+    portalLight.position.set(portalX + 0.5, portalY, portalZ + 0.5);
+    scene.add(portalLight);
+
     // Events
     const handleKeyDown = (e: KeyboardEvent) => { keysRef.current[e.code] = true; };
     const handleKeyUp = (e: KeyboardEvent) => { keysRef.current[e.code] = false; };
@@ -194,10 +272,41 @@ export default function GameWorld({
       });
     };
 
+    // Create break particles - floating mini cubes
+    const createBreakParticles = (x: number, y: number, z: number, color: number) => {
+      const particleCount = 8;
+      for (let i = 0; i < particleCount; i++) {
+        const size = 0.1 + Math.random() * 0.1;
+        const geo = new THREE.BoxGeometry(size, size, size);
+        const mat = new THREE.MeshLambertMaterial({ color, transparent: true, opacity: 1 });
+        const particle = new THREE.Mesh(geo, mat);
+        
+        particle.position.set(
+          x + 0.5 + (Math.random() - 0.5) * 0.5,
+          y + 0.5 + (Math.random() - 0.5) * 0.5,
+          z + 0.5 + (Math.random() - 0.5) * 0.5
+        );
+        
+        scene.add(particle);
+        
+        particlesRef.current.push({
+          mesh: particle,
+          velocity: new THREE.Vector3(
+            (Math.random() - 0.5) * 0.05,
+            Math.random() * 0.08 + 0.03,
+            (Math.random() - 0.5) * 0.05
+          ),
+          life: 1.0
+        });
+      }
+    };
+
     const removeBlock = (x: number, y: number, z: number) => {
       const key = getBlockKey(x, y, z);
       const mesh = blockMeshesRef.current.get(key);
       if (mesh) {
+        const blockType = BLOCK_TYPES[(mesh.userData as any).blockType];
+        createBreakParticles(x, y, z, blockType.color);
         scene.remove(mesh);
         mesh.geometry.dispose();
         if (Array.isArray(mesh.material)) mesh.material.forEach(m => m.dispose());
@@ -414,6 +523,39 @@ export default function GameWorld({
       crystalMeshesRef.current.forEach((group) => {
         group.rotation.y += 0.02;
       });
+
+      // Update break particles
+      particlesRef.current = particlesRef.current.filter(p => {
+        p.mesh.position.add(p.velocity);
+        p.velocity.y -= 0.002; // gravity
+        p.life -= 0.02;
+        (p.mesh.material as THREE.MeshLambertMaterial).opacity = p.life;
+        p.mesh.rotation.x += 0.1;
+        p.mesh.rotation.y += 0.1;
+        
+        if (p.life <= 0) {
+          scene.remove(p.mesh);
+          p.mesh.geometry.dispose();
+          (p.mesh.material as THREE.Material).dispose();
+          return false;
+        }
+        return true;
+      });
+
+      // Animate portal
+      if (portalMeshRef.current) {
+        const mat = portalMeshRef.current.material as THREE.MeshBasicMaterial;
+        mat.opacity = 0.5 + Math.sin(time * 2) * 0.2;
+        portalMeshRef.current.rotation.y = time * 0.5;
+
+        // Check if player is near portal with key
+        if (hasPortalKeyRef.current) {
+          const dist = camera.position.distanceTo(portalMeshRef.current.position);
+          if (dist < 4) {
+            onPortalActivatedRef.current();
+          }
+        }
+      }
 
       renderer.render(scene, camera);
     };
