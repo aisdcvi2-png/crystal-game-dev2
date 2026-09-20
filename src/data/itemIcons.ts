@@ -113,6 +113,12 @@ export const getItemIcon = (itemId: string): string => {
       <path d="M 16 14 Q 14 10 16 8 Q 18 10 16 14" fill="#4CAF50"/>
     </svg>`,
     
+    sapling: `<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+      <rect x="14" y="20" width="4" height="8" fill="#6B4226" stroke="#4A2E1A" stroke-width="1"/>
+      <circle cx="16" cy="16" r="5" fill="#4CAF50" stroke="#388E3C" stroke-width="1"/>
+      <circle cx="16" cy="16" r="2.5" fill="#66BB6A"/>
+    </svg>`,
+    
     iron_ore_item: `<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <linearGradient id="stoneGrad" x1="0%" y1="0%" x2="100%" y2="100%">

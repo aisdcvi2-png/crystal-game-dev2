@@ -26,6 +26,8 @@ export interface ItemType {
   light?: number;
   climbable?: boolean;
   transparent?: boolean;
+  plantable?: boolean;
+  growsTo?: string;
 }
 
 // Crafting recipes
@@ -60,6 +62,7 @@ export const BLOCK_TYPES: Record<string, BlockType> = {
   sand: { id: 'sand', name: 'Песок', color: 0xd4c475, hardness: 3, drops: [{ item: 'sand_block', count: 1, chance: 1 }] },
   oak_log: { id: 'oak_log', name: 'Дуб', color: 0x6B4226, hardness: 6, drops: [{ item: 'oak_log_item', count: 1, chance: 1 }] },
   oak_leaves: { id: 'oak_leaves', name: 'Листва', color: 0x2d7a2d, hardness: 2, rareDrops: [{ item: 'stick', count: 1, chance: 0.2 }] },
+  sapling: { id: 'sapling', name: 'Саженец', color: 0x4CAF50, hardness: 1, drops: [{ item: 'seeds', count: 1, chance: 1 }] },
   
   // Utility blocks
   torch: { id: 'torch', name: 'Факел', color: 0xFFA500, hardness: 1, drops: [{ item: 'torch', count: 1, chance: 1 }], light: 14 },
@@ -77,18 +80,18 @@ export const ITEM_TYPES: Record<string, ItemType> = {
   iron_ingot: { id: 'iron_ingot', name: 'Железный слиток', description: 'Для железных инструментов', category: 'material', stackSize: 64 },
   gold_ingot: { id: 'gold_ingot', name: 'Золотой слиток', description: 'Редкий материал', category: 'material', stackSize: 64 },
   diamond: { id: 'diamond', name: 'Алмаз', description: 'Самый ценный ресурс!', category: 'material', stackSize: 64 },
-  stick: { id: 'stick', name: 'Палка', description: 'Урон: 2', category: 'material', stackSize: 64, toolDamage: 2 },
-  seeds: { id: 'seeds', name: 'Семена', description: 'Можно посадить', category: 'material', stackSize: 64 },
+  stick: { id: 'stick', name: 'Палка', description: 'Урон: 2, Прочность: 10', category: 'tool', stackSize: 1, toolDamage: 2, durability: 10 },
+  seeds: { id: 'seeds', name: 'Семена', description: 'Посади в землю', category: 'material', stackSize: 64, plantable: true, growsTo: 'oak_log' },
   iron_ore_item: { id: 'iron_ore_item', name: 'Железная руда', description: 'Нужно переплавить', category: 'material', stackSize: 64 },
   gold_ore_item: { id: 'gold_ore_item', name: 'Золотая руда', description: 'Нужно переплавить', category: 'material', stackSize: 64 },
   crystal: { id: 'crystal', name: 'Кристалл', description: 'Магический кристалл!', category: 'special', stackSize: 64 },
   portal_key: { id: 'portal_key', name: 'Ключ портала', description: 'Открывает портал в новый мир!', category: 'special', stackSize: 1 },
   oak_log_item: { id: 'oak_log_item', name: 'Древесина', description: 'Бревно дуба', category: 'material', stackSize: 64 },
   
-  wood_pickaxe: { id: 'wood_pickaxe', name: 'Деревянная кирка', description: 'Прочность: 60, Урон: 3', category: 'tool', stackSize: 1, durability: TOOL_DURABILITY.wood, toolDamage: 3 },
-  stone_pickaxe: { id: 'stone_pickaxe', name: 'Каменная кирка', description: 'Прочность: 132, Урон: 5', category: 'tool', stackSize: 1, durability: TOOL_DURABILITY.stone, toolDamage: 5 },
-  iron_pickaxe: { id: 'iron_pickaxe', name: 'Железная кирка', description: 'Прочность: 251, Урон: 8', category: 'tool', stackSize: 1, durability: TOOL_DURABILITY.iron, toolDamage: 8 },
-  diamond_pickaxe: { id: 'diamond_pickaxe', name: 'Алмазная кирка', description: 'Прочность: 1562, Урон: 12', category: 'tool', stackSize: 1, durability: TOOL_DURABILITY.diamond, toolDamage: 12 },
+  wood_pickaxe: { id: 'wood_pickaxe', name: 'Деревянная кирка', description: 'Прочность: 60, Урон: 1', category: 'tool', stackSize: 1, durability: TOOL_DURABILITY.wood, toolDamage: 1 },
+  stone_pickaxe: { id: 'stone_pickaxe', name: 'Каменная кирка', description: 'Прочность: 132, Урон: 2', category: 'tool', stackSize: 1, durability: TOOL_DURABILITY.stone, toolDamage: 2 },
+  iron_pickaxe: { id: 'iron_pickaxe', name: 'Железная кирка', description: 'Прочность: 251, Урон: 3', category: 'tool', stackSize: 1, durability: TOOL_DURABILITY.iron, toolDamage: 3 },
+  diamond_pickaxe: { id: 'diamond_pickaxe', name: 'Алмазная кирка', description: 'Прочность: 1562, Урон: 4', category: 'tool', stackSize: 1, durability: TOOL_DURABILITY.diamond, toolDamage: 4 },
   
   // Utility blocks
   torch: { id: 'torch', name: 'Факел', description: 'Освещает пещеры', category: 'block', stackSize: 64, placeable: true, blockId: 'torch', light: 14 },
@@ -111,8 +114,8 @@ export const CRAFT_RECIPES: CraftRecipe[] = [
   // Workbench
   { id: 'crafting_table', name: 'Верстак', description: '4 доски', ingredients: [{ item: 'planks_block', count: 4 }], result: { item: 'crafting_table', count: 1 }, category: 'building', requiresWorkbench: false },
   
-  // Advanced materials (requires workbench)
-  { id: 'torch', name: 'Факел', description: 'Уголь + палка = 4 факела', ingredients: [{ item: 'coal', count: 1 }, { item: 'stick', count: 1 }], result: { item: 'torch', count: 4 }, category: 'materials', requiresWorkbench: true },
+  // Advanced materials
+  { id: 'torch', name: 'Факел', description: 'Уголь + палка = 4 факела', ingredients: [{ item: 'coal', count: 1 }, { item: 'stick', count: 1 }], result: { item: 'torch', count: 4 }, category: 'materials', requiresWorkbench: false },
   { id: 'iron_smelt', name: 'Железный слиток', description: 'Руда + уголь', ingredients: [{ item: 'iron_ore_item', count: 1 }, { item: 'coal', count: 1 }], result: { item: 'iron_ingot', count: 1 }, category: 'materials', requiresWorkbench: true },
   { id: 'gold_smelt', name: 'Золотой слиток', description: 'Руда + 2 угля', ingredients: [{ item: 'gold_ore_item', count: 1 }, { item: 'coal', count: 2 }], result: { item: 'gold_ingot', count: 1 }, category: 'materials', requiresWorkbench: true },
   { id: 'glass', name: 'Стекло', description: 'Песок + уголь = 4 стекла', ingredients: [{ item: 'sand_block', count: 1 }, { item: 'coal', count: 1 }], result: { item: 'glass', count: 4 }, category: 'materials', requiresWorkbench: true },
@@ -210,12 +213,25 @@ export function generateWorld(seed?: number): WorldBlock[][][] {
         if (y === 0) {
           type = 'bedrock';
         } else if (y < height - 2) {
+          // Geological distribution - ores by depth
+          const depth = height - y;
           const oreChance = noise(x * 2 + y, z * 3 + y, worldSeed + y * 5);
-          if (oreChance > 0.80) type = 'diamond_ore';
-          else if (oreChance > 0.65) type = 'gold_ore';
-          else if (oreChance > 0.45) type = 'iron_ore';
-          else if (oreChance > 0.25) type = 'coal_ore';
-          else type = 'stone';
+          
+          if (y <= 4 && oreChance > 0.85) {
+            // Diamonds only in deepest layers (y <= 4)
+            type = 'diamond_ore';
+          } else if (y <= 8 && oreChance > 0.75) {
+            // Gold in deep layers (y <= 8)
+            type = 'gold_ore';
+          } else if (y <= 12 && oreChance > 0.60) {
+            // Iron in middle-deep layers (y <= 12)
+            type = 'iron_ore';
+          } else if (y <= 16 && oreChance > 0.40) {
+            // Coal in upper layers (y <= 16)
+            type = 'coal_ore';
+          } else {
+            type = 'stone';
+          }
         } else if (y < height) {
           type = 'dirt';
         } else if (y === height) {

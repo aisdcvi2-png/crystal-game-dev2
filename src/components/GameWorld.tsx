@@ -51,6 +51,8 @@ export default function GameWorld({
   const hasPortalKeyRef = useRef(hasPortalKey);
   const onPortalActivatedRef = useRef(onPortalActivated);
   const blockGeoRef = useRef<THREE.BoxGeometry | null>(null);
+  const torchLightsRef = useRef<Map<string, THREE.PointLight>>(new Map());
+  const plantedSeedsRef = useRef<Map<string, { x: number; y: number; z: number; plantTime: number }>>(new Map());
 
   useEffect(() => { hotbarRef.current = hotbar; }, [hotbar]);
   useEffect(() => { selectedSlotRef.current = selectedSlot; }, [selectedSlot]);
@@ -178,12 +180,17 @@ export default function GameWorld({
     renderer.shadowMap.enabled = false;
     mountRef.current.appendChild(renderer.domElement);
 
-    // Lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+    // Lighting - dark underground with dynamic lighting
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.15); // Very dark base
     scene.add(ambientLight);
-    const sunLight = new THREE.DirectionalLight(0xffffff, 0.6);
+    const sunLight = new THREE.DirectionalLight(0xffffff, 0.8);
     sunLight.position.set(40, 80, 30);
     scene.add(sunLight);
+    
+    // Player light - follows camera, brighter on surface
+    const playerLight = new THREE.PointLight(0xffffff, 0.5, 15);
+    camera.add(playerLight);
+    playerLight.position.set(0, 0, 0);
 
     // Generate world
     const worldData = generateWorld();
@@ -538,11 +545,31 @@ export default function GameWorld({
       direction.normalize();
       velocityRef.current.x = direction.x * speed;
       velocityRef.current.z = direction.z * speed;
-      if (keysRef.current['Space'] && onGroundRef.current) {
-        velocityRef.current.y = 0.18;
-        onGroundRef.current = false;
+      
+      // Check if on ladder
+      const playerBlockX = Math.floor(camera.position.x);
+      const playerBlockY = Math.floor(camera.position.y - 1);
+      const playerBlockZ = Math.floor(camera.position.z);
+      const onLadder = worldData[playerBlockX]?.[playerBlockZ]?.[playerBlockY]?.type === 'ladder' ||
+                       worldData[playerBlockX]?.[playerBlockZ]?.[playerBlockY + 1]?.type === 'ladder';
+      
+      if (onLadder) {
+        // Climb with W/S or Space/Shift
+        if (keysRef.current['KeyW'] || keysRef.current['ArrowUp'] || keysRef.current['Space']) {
+          velocityRef.current.y = 0.1;
+        } else if (keysRef.current['KeyS'] || keysRef.current['ArrowDown'] || keysRef.current['ShiftLeft']) {
+          velocityRef.current.y = -0.1;
+        } else {
+          velocityRef.current.y = 0; // Stay in place on ladder
+        }
+        onGroundRef.current = true;
+      } else {
+        if (keysRef.current['Space'] && onGroundRef.current) {
+          velocityRef.current.y = 0.18;
+          onGroundRef.current = false;
+        }
+        velocityRef.current.y -= 0.007;
       }
-      velocityRef.current.y -= 0.007;
 
       const newX = camera.position.x + velocityRef.current.x;
       const newY = camera.position.y + velocityRef.current.y;
@@ -597,6 +624,29 @@ export default function GameWorld({
         velocityRef.current.set(0, 0, 0);
       }
       playerPosition.current.copy(camera.position);
+
+      // Update player light based on depth
+      const playerY = camera.position.y;
+      const surfaceY = getSurfaceHeight(worldData, Math.floor(camera.position.x), Math.floor(camera.position.z));
+      const depth = surfaceY - playerY;
+      
+      // Dimmer light underground, brighter on surface
+      const playerLight = camera.children.find(c => c instanceof THREE.PointLight) as THREE.PointLight;
+      if (playerLight) {
+        if (depth > 5) {
+          // Underground - very dim
+          playerLight.intensity = 0.3;
+          playerLight.distance = 8;
+        } else if (depth > 2) {
+          // Near surface underground
+          playerLight.intensity = 0.5;
+          playerLight.distance = 10;
+        } else {
+          // On surface - bright
+          playerLight.intensity = 0.8;
+          playerLight.distance = 15;
+        }
+      }
 
       // Update held item if slot changed
       if (currentHeldItemRef.current !== hotbarRef.current[selectedSlotRef.current]) {
@@ -770,6 +820,7 @@ export default function GameWorld({
             const maxDist = 5;
             const step = 0.2;
             let lastEmpty = null;
+            let lastBlock = null;
             
             for (let d = 0; d < maxDist; d += step) {
               const point = ray.at(d, new THREE.Vector3());
@@ -780,6 +831,7 @@ export default function GameWorld({
               if (bx >= 0 && bx < WORLD_SIZE && by >= 0 && by < WORLD_HEIGHT && bz >= 0 && bz < WORLD_SIZE) {
                 const block = worldData[bx]?.[bz]?.[by];
                 if (block) {
+                  lastBlock = { x: bx, y: by, z: bz, block };
                   if (lastEmpty) {
                     const { x: px, y: py, z: pz } = lastEmpty;
                     const playerBlockX = Math.floor(camera.position.x);
@@ -787,10 +839,37 @@ export default function GameWorld({
                     const playerBlockZ = Math.floor(camera.position.z);
                     if (!(px === playerBlockX && pz === playerBlockZ && (py === playerBlockY || py === playerBlockY + 1))) {
                       const blockId = itemData.blockId;
-                      worldData[px][pz][py] = { type: blockId, health: BLOCK_TYPES[blockId]?.hardness || 3, maxHealth: BLOCK_TYPES[blockId]?.hardness || 3 };
-                      addBlock(px, py, pz, blockId);
-                      onPlaceBlockRef.current(px, py, pz);
-                      placeCooldownRef.current = 0.3;
+                      
+                      // Check if planting seeds on dirt/grass
+                      if (itemData.plantable && lastBlock && (lastBlock.block.type === 'dirt' || lastBlock.block.type === 'grass')) {
+                        const plantX = lastBlock.x;
+                        const plantY = lastBlock.y + 1;
+                        const plantZ = lastBlock.z;
+                        
+                        if (!worldData[plantX]?.[plantZ]?.[plantY]) {
+                          worldData[plantX][plantZ][plantY] = { type: 'sapling', health: 1, maxHealth: 1 };
+                          addBlock(plantX, plantY, plantZ, 'sapling');
+                          plantedSeedsRef.current.set(`${plantX},${plantY},${plantZ}`, { 
+                            x: plantX, y: plantY, z: plantZ, plantTime: time 
+                          });
+                          onPlaceBlockRef.current(plantX, plantY, plantZ);
+                          placeCooldownRef.current = 0.3;
+                        }
+                      } else {
+                        worldData[px][pz][py] = { type: blockId, health: BLOCK_TYPES[blockId]?.hardness || 3, maxHealth: BLOCK_TYPES[blockId]?.hardness || 3 };
+                        addBlock(px, py, pz, blockId);
+                        onPlaceBlockRef.current(px, py, pz);
+                        
+                        // Add torch light
+                        if (blockId === 'torch') {
+                          const torchLight = new THREE.PointLight(0xFFA500, 1.5, 12);
+                          torchLight.position.set(px + 0.5, py + 0.5, pz + 0.5);
+                          scene.add(torchLight);
+                          torchLightsRef.current.set(`${px},${py},${pz}`, torchLight);
+                        }
+                        
+                        placeCooldownRef.current = 0.3;
+                      }
                     }
                   }
                   break;
@@ -866,6 +945,49 @@ export default function GameWorld({
           return false;
         }
         return true;
+      });
+
+      // Grow planted seeds into trees (after 30 seconds)
+      plantedSeedsRef.current.forEach((seedData, key) => {
+        if (time - seedData.plantTime > 30) {
+          const { x, y, z } = seedData;
+          
+          // Remove sapling
+          removeBlock(x, y, z);
+          
+          // Grow tree
+          const treeHeight = 4 + Math.floor(Math.random() * 2);
+          
+          // Trunk
+          for (let h = 0; h < treeHeight; h++) {
+            if (y + h < WORLD_HEIGHT && !worldData[x]?.[z]?.[y + h]) {
+              worldData[x][z][y + h] = { type: 'oak_log', health: 6, maxHealth: 6 };
+              addBlock(x, y + h, z, 'oak_log');
+            }
+          }
+          
+          // Leaves
+          for (let ly = treeHeight - 1; ly <= treeHeight + 2; ly++) {
+            const radius = ly >= treeHeight + 1 ? 1 : 2;
+            for (let lx = -radius; lx <= radius; lx++) {
+              for (let lz = -radius; lz <= radius; lz++) {
+                const nx = x + lx;
+                const nz = z + lz;
+                
+                if (nx >= 0 && nx < WORLD_SIZE && nz >= 0 && nz < WORLD_SIZE) {
+                  if (!worldData[nx][nz][y + ly]) {
+                    if (!(lx === 0 && lz === 0 && ly <= treeHeight)) {
+                      worldData[nx][nz][y + ly] = { type: 'oak_leaves', health: 2, maxHealth: 2 };
+                      addBlock(nx, y + ly, nz, 'oak_leaves');
+                    }
+                  }
+                }
+              }
+            }
+          }
+          
+          plantedSeedsRef.current.delete(key);
+        }
       });
 
       // Animate portal
