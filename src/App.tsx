@@ -198,6 +198,12 @@ function App() {
   const playerPosition = useRef(new THREE.Vector3(0, 3, 0));
   const subjectIndexRef = useRef(0);
   const notifTimeoutRef = useRef<any>(null);
+  const hotbarRef = useRef(hotbar);
+  const inventoryRef = useRef(inventory);
+
+  // Keep refs updated
+  useEffect(() => { hotbarRef.current = hotbar; }, [hotbar]);
+  useEffect(() => { inventoryRef.current = inventory; }, [inventory]);
 
   const showNotif = useCallback((msg: string) => {
     setNotification(msg);
@@ -230,13 +236,27 @@ function App() {
   const addItem = useCallback((itemId: string, count: number = 1) => {
     const itemData = ITEM_TYPES[itemId];
     if (!itemData) return;
+    
+    // Add items one by one
     for (let c = 0; c < count; c++) {
       setInventory(prev => {
         const newInv = [...prev];
-        for (let i = 0; i < 27; i++) { if (!newInv[i]) { newInv[i] = itemId; return newInv; } }
+        // Try to add to inventory first
+        for (let i = 0; i < 27; i++) {
+          if (!newInv[i]) {
+            newInv[i] = itemId;
+            return newInv;
+          }
+        }
+        // If inventory is full, try hotbar
         setHotbar(prevHotbar => {
           const newHotbar = [...prevHotbar];
-          for (let i = 0; i < 9; i++) { if (!newHotbar[i]) { newHotbar[i] = itemId; return newHotbar; } }
+          for (let i = 0; i < 9; i++) {
+            if (!newHotbar[i]) {
+              newHotbar[i] = itemId;
+              return newHotbar;
+            }
+          }
           return prevHotbar;
         });
         return prev;
@@ -247,29 +267,42 @@ function App() {
 
   const removeItem = useCallback((itemId: string, count: number = 1): boolean => {
     let removed = 0;
+    
+    // Remove from inventory first
     setInventory(prev => {
       const newInv = [...prev];
-      for (let i = 0; i < 27 && removed < count; i++) { if (newInv[i] === itemId) { newInv[i] = null; removed++; } }
+      for (let i = 0; i < 27 && removed < count; i++) {
+        if (newInv[i] === itemId) {
+          newInv[i] = null;
+          removed++;
+        }
+      }
       return newInv;
     });
-    setTimeout(() => {
-      if (removed < count) {
-        setHotbar(prev => {
-          const newHotbar = [...prev];
-          for (let i = 0; i < 9 && removed < count; i++) { if (newHotbar[i] === itemId) { newHotbar[i] = null; removed++; } }
-          return newHotbar;
-        });
-      }
-    }, 0);
+    
+    // If we still need to remove more, remove from hotbar
+    if (removed < count) {
+      setHotbar(prev => {
+        const newHotbar = [...prev];
+        for (let i = 0; i < 9 && removed < count; i++) {
+          if (newHotbar[i] === itemId) {
+            newHotbar[i] = null;
+            removed++;
+          }
+        }
+        return newHotbar;
+      });
+    }
+    
     return true;
   }, []);
 
   const countItem = useCallback((itemId: string): number => {
     let count = 0;
-    hotbar.forEach(item => { if (item === itemId) count++; });
-    inventory.forEach(item => { if (item === itemId) count++; });
+    hotbarRef.current.forEach(item => { if (item === itemId) count++; });
+    inventoryRef.current.forEach(item => { if (item === itemId) count++; });
     return count;
-  }, [hotbar, inventory]);
+  }, []);
 
   const getNextQuestion = useCallback((): Question | null => {
     const unanswered = questions.filter(q => !answeredIds.includes(q.id));
@@ -403,19 +436,38 @@ function App() {
     if (!recipe) return;
     
     // Check if workbench is required
-    if (recipe.requiresWorkbench && countItem('crafting_table') === 0) {
-      showNotif('⚠️ Нужен верстак!');
+    if (recipe.requiresWorkbench) {
+      const workbenchCount = hotbarRef.current.filter(item => item === 'crafting_table').length +
+                            inventoryRef.current.filter(item => item === 'crafting_table').length;
+      if (workbenchCount === 0) {
+        showNotif('⚠️ Нужен верстак!');
+        return;
+      }
+    }
+    
+    // Check if we have all ingredients using refs
+    const hasAll = recipe.ingredients.every(ing => {
+      const count = hotbarRef.current.filter(item => item === ing.item).length +
+                   inventoryRef.current.filter(item => item === ing.item).length;
+      return count >= ing.count;
+    });
+    
+    if (!hasAll) {
+      showNotif('Недостаточно материалов!');
       return;
     }
     
-    const hasAll = recipe.ingredients.every(ing => countItem(ing.item) >= ing.count);
-    if (!hasAll) { showNotif('Недостаточно материалов!'); return; }
+    // Remove ingredients
     recipe.ingredients.forEach(ing => removeItem(ing.item, ing.count));
+    
+    // Add result
     const resultData = ITEM_TYPES[recipe.result.item];
-    if (resultData?.durability) setToolDurability(prev => ({ ...prev, [recipe.result.item]: resultData.durability! }));
+    if (resultData?.durability) {
+      setToolDurability(prev => ({ ...prev, [recipe.result.item]: resultData.durability! }));
+    }
     addItem(recipe.result.item, recipe.result.count);
     showNotif(`🔨 Создано: ${recipe.name} x${recipe.result.count}`);
-  }, [countItem, removeItem, addItem, showNotif]);
+  }, [removeItem, addItem, showNotif]);
 
   const handlePortalActivated = useCallback(() => {
     if (!portalActivated && countItem('portal_key') > 0) {
@@ -793,10 +845,14 @@ function App() {
                     <h4 className="text-gray-300 font-bold mb-2 text-xs">📦 Материалы</h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                       {CRAFT_RECIPES.filter(r => r.category === 'materials').map(recipe => {
-                        const craftable = recipe.ingredients.every(ing => countItem(ing.item) >= ing.count);
+                        const getItemCount = (itemId: string) => 
+                          hotbarRef.current.filter(item => item === itemId).length +
+                          inventoryRef.current.filter(item => item === itemId).length;
+                        
+                        const craftable = recipe.ingredients.every(ing => getItemCount(ing.item) >= ing.count);
                         const missingItems = recipe.ingredients
-                          .filter(ing => countItem(ing.item) < ing.count)
-                          .map(ing => `${ITEM_TYPES[ing.item]?.name || ing.item}: ${ing.count - countItem(ing.item)}`)
+                          .filter(ing => getItemCount(ing.item) < ing.count)
+                          .map(ing => `${ITEM_TYPES[ing.item]?.name || ing.item}: ${ing.count - getItemCount(ing.item)}`)
                           .join(', ');
                         const tooltip = craftable ? 'Можно скрафтить!' : `Не хватает: ${missingItems || 'верстака'}`;
                         
@@ -812,13 +868,14 @@ function App() {
                             </div>
                             <div className="mt-1 flex flex-wrap gap-1">
                               {recipe.ingredients.map((ing, i) => {
-                                const hasEnough = countItem(ing.item) >= ing.count;
+                                const itemCount = getItemCount(ing.item);
+                                const hasEnough = itemCount >= ing.count;
                                 const itemName = ITEM_TYPES[ing.item]?.name || ing.item;
-                                const itemTooltip = hasEnough ? `${itemName}: достаточно` : `${itemName}: нужно ещё ${ing.count - countItem(ing.item)}`;
+                                const itemTooltip = hasEnough ? `${itemName}: достаточно` : `${itemName}: нужно ещё ${ing.count - itemCount}`;
                                 return (
                                   <div key={i} className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] ${hasEnough ? 'bg-green-800/30 text-green-300' : 'bg-red-800/30 text-red-300'}`} title={itemTooltip}>
                                     <ItemIcon itemId={ing.item} size={12} />
-                                    <span>{countItem(ing.item)}/{ing.count}</span>
+                                    <span>{itemCount}/{ing.count}</span>
                                   </div>
                                 );
                               })}
@@ -834,11 +891,15 @@ function App() {
                     <h4 className="text-gray-300 font-bold mb-2 text-xs">⛏️ Инструменты</h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                       {CRAFT_RECIPES.filter(r => r.category === 'tools').map(recipe => {
-                        const craftable = recipe.ingredients.every(ing => countItem(ing.item) >= ing.count);
-                        const needsWorkbench = recipe.requiresWorkbench && countItem('crafting_table') === 0;
+                        const getItemCount = (itemId: string) => 
+                          hotbarRef.current.filter(item => item === itemId).length +
+                          inventoryRef.current.filter(item => item === itemId).length;
+                        
+                        const craftable = recipe.ingredients.every(ing => getItemCount(ing.item) >= ing.count);
+                        const needsWorkbench = recipe.requiresWorkbench && getItemCount('crafting_table') === 0;
                         const missingItems = recipe.ingredients
-                          .filter(ing => countItem(ing.item) < ing.count)
-                          .map(ing => `${ITEM_TYPES[ing.item]?.name || ing.item}: ${ing.count - countItem(ing.item)}`)
+                          .filter(ing => getItemCount(ing.item) < ing.count)
+                          .map(ing => `${ITEM_TYPES[ing.item]?.name || ing.item}: ${ing.count - getItemCount(ing.item)}`)
                           .join(', ');
                         let tooltip = 'Можно скрафтить!';
                         if (!craftable) {
@@ -861,13 +922,14 @@ function App() {
                             </div>
                             <div className="mt-1 flex flex-wrap gap-1">
                               {recipe.ingredients.map((ing, i) => {
-                                const hasEnough = countItem(ing.item) >= ing.count;
+                                const itemCount = getItemCount(ing.item);
+                                const hasEnough = itemCount >= ing.count;
                                 const itemName = ITEM_TYPES[ing.item]?.name || ing.item;
-                                const itemTooltip = hasEnough ? `${itemName}: достаточно` : `${itemName}: нужно ещё ${ing.count - countItem(ing.item)}`;
+                                const itemTooltip = hasEnough ? `${itemName}: достаточно` : `${itemName}: нужно ещё ${ing.count - itemCount}`;
                                 return (
                                   <div key={i} className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] ${hasEnough ? 'bg-green-800/30 text-green-300' : 'bg-red-800/30 text-red-300'}`} title={itemTooltip}>
                                     <ItemIcon itemId={ing.item} size={12} />
-                                    <span>{countItem(ing.item)}/{ing.count}</span>
+                                    <span>{itemCount}/{ing.count}</span>
                                   </div>
                                 );
                               })}
@@ -883,11 +945,15 @@ function App() {
                     <h4 className="text-gray-300 font-bold mb-2 text-xs">🏗️ Строительство</h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                       {CRAFT_RECIPES.filter(r => r.category === 'building').map(recipe => {
-                        const craftable = recipe.ingredients.every(ing => countItem(ing.item) >= ing.count);
-                        const needsWorkbench = recipe.requiresWorkbench && countItem('crafting_table') === 0;
+                        const getItemCount = (itemId: string) => 
+                          hotbarRef.current.filter(item => item === itemId).length +
+                          inventoryRef.current.filter(item => item === itemId).length;
+                        
+                        const craftable = recipe.ingredients.every(ing => getItemCount(ing.item) >= ing.count);
+                        const needsWorkbench = recipe.requiresWorkbench && getItemCount('crafting_table') === 0;
                         const missingItems = recipe.ingredients
-                          .filter(ing => countItem(ing.item) < ing.count)
-                          .map(ing => `${ITEM_TYPES[ing.item]?.name || ing.item}: ${ing.count - countItem(ing.item)}`)
+                          .filter(ing => getItemCount(ing.item) < ing.count)
+                          .map(ing => `${ITEM_TYPES[ing.item]?.name || ing.item}: ${ing.count - getItemCount(ing.item)}`)
                           .join(', ');
                         let tooltip = 'Можно скрафтить!';
                         if (!craftable) {
@@ -909,13 +975,14 @@ function App() {
                             </div>
                             <div className="mt-1 flex flex-wrap gap-1">
                               {recipe.ingredients.map((ing, i) => {
-                                const hasEnough = countItem(ing.item) >= ing.count;
+                                const itemCount = getItemCount(ing.item);
+                                const hasEnough = itemCount >= ing.count;
                                 const itemName = ITEM_TYPES[ing.item]?.name || ing.item;
-                                const itemTooltip = hasEnough ? `${itemName}: достаточно` : `${itemName}: нужно ещё ${ing.count - countItem(ing.item)}`;
+                                const itemTooltip = hasEnough ? `${itemName}: достаточно` : `${itemName}: нужно ещё ${ing.count - itemCount}`;
                                 return (
                                   <div key={i} className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] ${hasEnough ? 'bg-green-800/30 text-green-300' : 'bg-red-800/30 text-red-300'}`} title={itemTooltip}>
                                     <ItemIcon itemId={ing.item} size={12} />
-                                    <span>{countItem(ing.item)}/{ing.count}</span>
+                                    <span>{itemCount}/{ing.count}</span>
                                   </div>
                                 );
                               })}
@@ -932,11 +999,15 @@ function App() {
                       <h4 className="text-gray-300 font-bold mb-2 text-xs">✨ Особое</h4>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                         {CRAFT_RECIPES.filter(r => r.category === 'special').map(recipe => {
-                          const craftable = recipe.ingredients.every(ing => countItem(ing.item) >= ing.count);
-                          const needsWorkbench = recipe.requiresWorkbench && countItem('crafting_table') === 0;
+                          const getItemCount = (itemId: string) => 
+                            hotbarRef.current.filter(item => item === itemId).length +
+                            inventoryRef.current.filter(item => item === itemId).length;
+                          
+                          const craftable = recipe.ingredients.every(ing => getItemCount(ing.item) >= ing.count);
+                          const needsWorkbench = recipe.requiresWorkbench && getItemCount('crafting_table') === 0;
                           const missingItems = recipe.ingredients
-                            .filter(ing => countItem(ing.item) < ing.count)
-                            .map(ing => `${ITEM_TYPES[ing.item]?.name || ing.item}: ${ing.count - countItem(ing.item)}`)
+                            .filter(ing => getItemCount(ing.item) < ing.count)
+                            .map(ing => `${ITEM_TYPES[ing.item]?.name || ing.item}: ${ing.count - getItemCount(ing.item)}`)
                             .join(', ');
                           let tooltip = 'Можно скрафтить!';
                           if (!craftable) {
@@ -958,13 +1029,14 @@ function App() {
                               </div>
                               <div className="mt-1 flex flex-wrap gap-1">
                                 {recipe.ingredients.map((ing, i) => {
-                                  const hasEnough = countItem(ing.item) >= ing.count;
+                                  const itemCount = getItemCount(ing.item);
+                                  const hasEnough = itemCount >= ing.count;
                                   const itemName = ITEM_TYPES[ing.item]?.name || ing.item;
-                                  const itemTooltip = hasEnough ? `${itemName}: достаточно` : `${itemName}: нужно ещё ${ing.count - countItem(ing.item)}`;
+                                  const itemTooltip = hasEnough ? `${itemName}: достаточно` : `${itemName}: нужно ещё ${ing.count - itemCount}`;
                                   return (
                                     <div key={i} className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] ${hasEnough ? 'bg-purple-800/30 text-purple-300' : 'bg-red-800/30 text-red-300'}`} title={itemTooltip}>
                                       <ItemIcon itemId={ing.item} size={12} />
-                                      <span>{countItem(ing.item)}/{ing.count}</span>
+                                      <span>{itemCount}/{ing.count}</span>
                                     </div>
                                   );
                                 })}
