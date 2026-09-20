@@ -204,6 +204,8 @@ function App() {
   const [showCrystalChoice, setShowCrystalChoice] = useState(false);
   const [crystalTimer, setCrystalTimer] = useState<number | null>(null);
   const [pendingCrystal, setPendingCrystal] = useState<number | null>(null);
+  const [craftingGrid, setCraftingGrid] = useState<(string | null)[]>(Array(9).fill(null));
+  const [craftResult, setCraftResult] = useState<string | null>(null);
 
   const playerPosition = useRef(new THREE.Vector3(0, 3, 0));
   const subjectIndexRef = useRef(0);
