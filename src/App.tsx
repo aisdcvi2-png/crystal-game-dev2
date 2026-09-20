@@ -160,7 +160,7 @@ function App() {
   const [correctAnswers, setCorrectAnswers] = useState(0);
   const [currentSubject, setCurrentSubject] = useState<string | null>(null);
   const [availableCrystals, setAvailableCrystals] = useState<number[]>(Array.from({ length: 20 }, (_, i) => i));
-  const [breakProgress, setBreakProgress] = useState<{ progress: number; max: number; blockName: string } | null>(null);
+  // Break progress removed - using visual cracks instead
   const [showInventory, setShowInventory] = useState(false);
   const [notification, setNotification] = useState<string | null>(null);
   const [crystalNotification, setCrystalNotification] = useState<string | null>(null);
@@ -324,10 +324,7 @@ function App() {
     else setGameState('playing');
   };
 
-  const handleBreakProgress = useCallback((progress: number, maxHealth: number, blockName: string) => {
-    if (progress === 0 || !blockName) setBreakProgress(null);
-    else setBreakProgress({ progress, max: maxHealth, blockName });
-  }, []);
+  // Break progress removed - using visual cracks on blocks
 
   const handlePlaceBlock = useCallback((x: number, y: number, z: number) => {
     const itemId = hotbar[selectedSlot];
@@ -360,7 +357,7 @@ function App() {
     setGameState('start');
     setCrystalsCollected(0); setCurrentQuestion(null); setAnsweredIds([]); setCorrectAnswers(0);
     setCurrentSubject(null); setAvailableCrystals(Array.from({ length: 20 }, (_, i) => i));
-    setBreakProgress(null); setHotbar(['wood_pickaxe', null, null, null, null, null, null, null, null]);
+    setHotbar(['wood_pickaxe', null, null, null, null, null, null, null, null]);
     setInventory(['oak_log_item', 'oak_log_item', 'oak_log_item', ...Array(24).fill(null)]);
     setSelectedSlot(0); setDroppedCrystals([]); setPendingCrystalId(null);
     setToolDurability({ wood_pickaxe: TOOL_DURABILITY.wood }); subjectIndexRef.current = 0;
@@ -439,7 +436,6 @@ function App() {
             onCrystalFound={() => {}}
             playerPosition={playerPosition}
             availableCrystals={availableCrystals}
-            onBreakProgress={handleBreakProgress}
             onBlockMined={handleBlockMined}
             selectedSlot={selectedSlot}
             hotbar={hotbar}
@@ -472,20 +468,6 @@ function App() {
               </div>
             </div>
 
-            {/* Break progress */}
-            {breakProgress && (
-              <div className="absolute top-1/3 left-1/2 -translate-x-1/2">
-                <div className="bg-gray-900/90 backdrop-blur-sm border border-amber-500/50 rounded-xl px-6 py-3 min-w-[220px]">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-xl">⛏️</span>
-                    <span className="text-amber-300 font-bold text-sm">Добыча: {breakProgress.blockName}</span>
-                  </div>
-                  <div className="h-4 bg-gray-700 rounded-full overflow-hidden border border-gray-600">
-                    <div className="h-full transition-all duration-100 rounded-full bg-gradient-to-r from-amber-500 to-orange-500" style={{ width: `${(breakProgress.progress / breakProgress.max) * 100}%` }} />
-                  </div>
-                </div>
-              </div>
-            )}
 
             {/* Portal objective */}
             <div className="absolute top-20 right-4 pointer-events-auto">

@@ -6,7 +6,6 @@ interface GameWorldProps {
   onCrystalFound: (crystalId: number) => void;
   playerPosition: React.MutableRefObject<THREE.Vector3>;
   availableCrystals: number[];
-  onBreakProgress: (progress: number, maxHealth: number, blockName: string) => void;
   onBlockMined: (blockType: string, x: number, y: number, z: number) => void;
   selectedSlot: number;
   hotbar: (string | null)[];
@@ -18,7 +17,7 @@ interface GameWorldProps {
 }
 
 export default function GameWorld({
-  onCrystalFound, playerPosition, availableCrystals, onBreakProgress, onBlockMined,
+  onCrystalFound, playerPosition, availableCrystals, onBlockMined,
   selectedSlot, hotbar, onPlaceBlock, onCrystalPickup, droppedCrystals, onPortalActivated, hasPortalKey
 }: GameWorldProps) {
   const mountRef = useRef<HTMLDivElement>(null);
@@ -30,7 +29,7 @@ export default function GameWorld({
   const pickaxeRef = useRef<THREE.Group | null>(null);
   const pickaxeSwingRef = useRef({ swinging: false, time: 0 });
   const worldDataRef = useRef<WorldBlock[][][]>([]);
-  const instancedMeshesRef = useRef<Map<string, { mesh: THREE.InstancedMesh; positions: Map<string, number> }>>(new Map());
+  const instancedMeshesRef = useRef<Map<string, { mesh: THREE.InstancedMesh; positions: Map<string, number>; originalColors: Map<string, THREE.Color> }>>(new Map());
   const raycasterRef = useRef(new THREE.Raycaster());
   const swingCooldownRef = useRef(0);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -170,17 +169,33 @@ export default function GameWorld({
       instancedMesh.count = positions.length; // Only render visible blocks
       
       const positionMap = new Map<string, number>();
+      const color = new THREE.Color();
+      
       positions.forEach((pos, index) => {
         matrix.setPosition(pos.x + 0.5, pos.y + 0.5, pos.z + 0.5);
         instancedMesh.setMatrixAt(index, matrix);
         positionMap.set(getBlockKey(pos.x, pos.y, pos.z), index);
+        
+        // Initialize instance colors
+        color.set(blockType.color);
+        instancedMesh.setColorAt(index, color);
       });
       
       instancedMesh.instanceMatrix.needsUpdate = true;
+      if (instancedMesh.instanceColor) {
+        instancedMesh.instanceColor.needsUpdate = true;
+      }
       instancedMesh.userData = { blockType: type };
       scene.add(instancedMesh);
       
-      instancedMeshesRef.current.set(type, { mesh: instancedMesh, positions: positionMap });
+      // Store original colors for damage visualization
+      const originalColors = new Map<string, THREE.Color>();
+      positions.forEach((pos) => {
+        const key = getBlockKey(pos.x, pos.y, pos.z);
+        originalColors.set(key, new THREE.Color(blockType.color));
+      });
+      
+      instancedMeshesRef.current.set(type, { mesh: instancedMesh, positions: positionMap, originalColors });
     });
 
     // Pickaxe
@@ -240,7 +255,7 @@ export default function GameWorld({
       if (e.button === 2) mouseRef.current.rightDown = true;
     };
     const handleMouseUp = (e: MouseEvent) => {
-      if (e.button === 0) { mouseRef.current.leftDown = false; onBreakProgress(0, 1, ''); }
+      if (e.button === 0) { mouseRef.current.leftDown = false; }
       if (e.button === 2) mouseRef.current.rightDown = false;
     };
     const handleContextMenu = (e: Event) => e.preventDefault();
@@ -294,6 +309,17 @@ export default function GameWorld({
           matrix.setPosition(nx + 0.5, ny + 0.5, nz + 0.5);
           typeData.mesh.setMatrixAt(newIndex, matrix);
           typeData.mesh.instanceMatrix.needsUpdate = true;
+          
+          // Initialize color for new block
+          const blockType = BLOCK_TYPES[neighborBlock.type];
+          const color = new THREE.Color(blockType.color);
+          typeData.mesh.setColorAt(newIndex, color);
+          if (typeData.mesh.instanceColor) {
+            typeData.mesh.instanceColor.needsUpdate = true;
+          }
+          
+          // Store original color
+          typeData.originalColors.set(key, color.clone());
           
           typeData.mesh.count++;
           typeData.positions.set(key, newIndex);
@@ -362,6 +388,17 @@ export default function GameWorld({
       matrix.setPosition(x + 0.5, y + 0.5, z + 0.5);
       typeData.mesh.setMatrixAt(newIndex, matrix);
       typeData.mesh.instanceMatrix.needsUpdate = true;
+      
+      // Initialize color for new block
+      const blockType = BLOCK_TYPES[type];
+      const color = new THREE.Color(blockType.color);
+      typeData.mesh.setColorAt(newIndex, color);
+      if (typeData.mesh.instanceColor) {
+        typeData.mesh.instanceColor.needsUpdate = true;
+      }
+      
+      // Store original color
+      typeData.originalColors.set(key, color.clone());
       
       typeData.mesh.count++;
       typeData.positions.set(key, newIndex);
@@ -488,18 +525,56 @@ export default function GameWorld({
           if (swingCooldownRef.current <= 0 && !pickaxeSwingRef.current.swinging) {
             pickaxeSwingRef.current.swinging = true;
             pickaxeSwingRef.current.time = 0;
-            swingCooldownRef.current = 0.5; // Slower mining - 0.5 seconds between hits
+            swingCooldownRef.current = 0.8; // Slower mining - 0.8 seconds between hits
             
-            // Reduce damage per hit for slower mining
-            hitBlock.block.health -= 0.5;
+            // Get tool damage from equipped item
+            const selectedItem = hotbarRef.current[selectedSlotRef.current];
+            let toolDamage = 1; // Hand damage
+            if (selectedItem) {
+              const itemData = ITEM_TYPES[selectedItem];
+              if (itemData?.toolDamage) {
+                toolDamage = itemData.toolDamage;
+              }
+            }
+            
+            hitBlock.block.health -= toolDamage;
             const blockTypeData = BLOCK_TYPES[hitBlock.block.type];
-            onBreakProgress(hitBlock.block.maxHealth - hitBlock.block.health, hitBlock.block.maxHealth, blockTypeData.name);
+            
+            // Visual damage - darken block based on remaining health
+            const key = getBlockKey(hitBlock.x, hitBlock.y, hitBlock.z);
+            const typeData = instancedMeshesRef.current.get(hitBlock.block.type);
+            if (typeData) {
+              const instanceIndex = typeData.positions.get(key);
+              if (instanceIndex !== undefined) {
+                const originalColor = typeData.originalColors.get(key);
+                if (originalColor) {
+                  const damageRatio = 1 - (hitBlock.block.health / hitBlock.block.maxHealth);
+                  const damagedColor = originalColor.clone();
+                  
+                  // Create crack effect by darkening
+                  if (damageRatio > 0.25) {
+                    damagedColor.multiplyScalar(0.8); // 25% darker
+                  }
+                  if (damageRatio > 0.5) {
+                    damagedColor.multiplyScalar(0.7); // 30% darker
+                  }
+                  if (damageRatio > 0.75) {
+                    damagedColor.multiplyScalar(0.6); // 20% darker
+                  }
+                  
+                  // Update instance color
+                  typeData.mesh.setColorAt(instanceIndex, damagedColor);
+                  if (typeData.mesh.instanceColor) {
+                    typeData.mesh.instanceColor.needsUpdate = true;
+                  }
+                }
+              }
+            }
             
             if (hitBlock.block.health <= 0) {
               removeBlock(hitBlock.x, hitBlock.y, hitBlock.z);
               revealNeighbors(hitBlock.x, hitBlock.y, hitBlock.z);
               onBlockMined(hitBlock.block.type, hitBlock.x, hitBlock.y, hitBlock.z);
-              onBreakProgress(0, 1, '');
             }
           }
         }
