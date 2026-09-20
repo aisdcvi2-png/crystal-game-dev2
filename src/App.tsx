@@ -193,6 +193,7 @@ function App() {
   const [dragItem, setDragItem] = useState<{ item: string; from: 'hotbar' | 'inventory'; index: number } | null>(null);
   const [dragOverSlot, setDragOverSlot] = useState<{ from: 'hotbar' | 'inventory'; index: number } | null>(null);
   const [portalActivated, setPortalActivated] = useState(false);
+  const [crystalPositions, setCrystalPositions] = useState<Array<{id: number, x: number, y: number, z: number, collected: boolean}>>([]);
 
   const playerPosition = useRef(new THREE.Vector3(0, 3, 0));
   const subjectIndexRef = useRef(0);
@@ -287,31 +288,37 @@ function App() {
     if (!blockData) return;
     damageTool();
     if (blockData.drops) blockData.drops.forEach(drop => { if (Math.random() < drop.chance) addItem(drop.item, drop.count); });
+    
+    // Check if this block is near a crystal position
+    const crystalRadius = 3; // blocks radius to trigger crystal spawn
+    const nearbyCrystal = crystalPositions.find(cp => {
+      const dx = cp.x - x;
+      const dy = cp.y - y;
+      const dz = cp.z - z;
+      const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      return distance <= crystalRadius && !cp.collected;
+    });
+    
+    if (nearbyCrystal && availableCrystals.length > 0) {
+      const crystalId = nearbyCrystal.id;
+      setCrystalPositions(prev => prev.map(cp => 
+        cp.id === crystalId ? { ...cp, collected: true } : cp
+      ));
+      setAvailableCrystals(prev => prev.slice(1));
+      setDroppedCrystals(prev => [...prev, { id: crystalId, x: nearbyCrystal.x, y: nearbyCrystal.y + 1, z: nearbyCrystal.z }]);
+      setCrystalNotification('💎 Откопан кристалл! Подойди чтобы подобрать!');
+      setTimeout(() => setCrystalNotification(null), 3000);
+    }
+    
+    // Regular rare drops (excluding crystals)
     if (blockData.rareDrops) {
       blockData.rareDrops.forEach(drop => {
-        if (Math.random() < drop.chance) {
-          if (drop.item === 'crystal' && availableCrystals.length > 0) {
-            // Check minimum distance from other crystals (at least 8 blocks)
-            const minDistance = 8;
-            const tooClose = droppedCrystals.some(c => {
-              const dx = c.x - x;
-              const dy = c.y - y;
-              const dz = c.z - z;
-              return Math.sqrt(dx * dx + dy * dy + dz * dz) < minDistance;
-            });
-            
-            if (!tooClose) {
-              const crystalId = availableCrystals[0];
-              setAvailableCrystals(prev => prev.slice(1));
-              setDroppedCrystals(prev => [...prev, { id: crystalId, x, y: y + 1, z }]);
-              setCrystalNotification('💎 Откопан кристалл! Подойди чтобы подобрать!');
-              setTimeout(() => setCrystalNotification(null), 3000);
-            }
-          } else addItem(drop.item, drop.count);
+        if (Math.random() < drop.chance && drop.item !== 'crystal') {
+          addItem(drop.item, drop.count);
         }
       });
     }
-  }, [availableCrystals, addItem, damageTool, droppedCrystals]);
+  }, [addItem, damageTool, crystalPositions, availableCrystals]);
 
   const handleCrystalPickup = useCallback((crystalId: number) => {
     setDroppedCrystals(prev => prev.filter(c => c.id !== crystalId));
@@ -328,6 +335,28 @@ function App() {
   }, [getNextQuestion]);
 
   const handleStart = () => {
+    // Generate evenly distributed crystal positions
+    const positions = [];
+    const gridSize = 5; // 5x4 grid for 20 crystals
+    const mapSize = 64;
+    const cellWidth = mapSize / gridSize;
+    const cellHeight = mapSize / 4;
+    
+    for (let i = 0; i < 20; i++) {
+      const gridX = i % gridSize;
+      const gridZ = Math.floor(i / gridSize);
+      
+      // Random position within grid cell
+      const x = Math.floor(gridX * cellWidth + Math.random() * cellWidth);
+      const z = Math.floor(gridZ * cellHeight + Math.random() * cellHeight);
+      
+      // Find surface height at this position
+      const y = 5; // Default height, will be adjusted in GameWorld
+      
+      positions.push({ id: i, x, y, z, collected: false });
+    }
+    
+    setCrystalPositions(positions);
     setGameState('playing');
     setCurrentSubject(subjects[0].name);
   };
@@ -400,10 +429,11 @@ function App() {
     setCrystalsCollected(0); setCurrentQuestion(null); setAnsweredIds([]); setCorrectAnswers(0);
     setCurrentSubject(null); setAvailableCrystals(Array.from({ length: 20 }, (_, i) => i));
     setHotbar(['wood_pickaxe', null, null, null, null, null, null, null, null]);
-    setInventory(['oak_log_item', 'oak_log_item', 'oak_log_item', ...Array(24).fill(null)]);
+    setInventory(['oak_log_item', 'oak_log_item', 'oak_log_item', 'oak_log_item', 'oak_log_item', ...Array(22).fill(null)]);
     setSelectedSlot(0); setDroppedCrystals([]); setPendingCrystalId(null);
     setToolDurability({ wood_pickaxe: TOOL_DURABILITY.wood }); subjectIndexRef.current = 0;
     setPortalActivated(false);
+    setCrystalPositions([]);
   };
 
   // Keyboard handler
@@ -764,8 +794,14 @@ function App() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                       {CRAFT_RECIPES.filter(r => r.category === 'materials').map(recipe => {
                         const craftable = recipe.ingredients.every(ing => countItem(ing.item) >= ing.count);
+                        const missingItems = recipe.ingredients
+                          .filter(ing => countItem(ing.item) < ing.count)
+                          .map(ing => `${ITEM_TYPES[ing.item]?.name || ing.item}: ${ing.count - countItem(ing.item)}`)
+                          .join(', ');
+                        const tooltip = craftable ? 'Можно скрафтить!' : `Не хватает: ${missingItems || 'верстака'}`;
+                        
                         return (
-                          <div key={recipe.id} className={`rounded-lg p-2 border ${craftable ? 'border-green-500/50 bg-green-900/20 cursor-pointer hover:bg-green-900/30' : 'border-gray-600/30 bg-gray-800/30 opacity-60'}`} onClick={() => craftable && handleCraft(recipe.id)}>
+                          <div key={recipe.id} className={`rounded-lg p-2 border ${craftable ? 'border-green-500/50 bg-green-900/20 cursor-pointer hover:bg-green-900/30' : 'border-gray-600/30 bg-gray-800/30 opacity-60'}`} onClick={() => craftable && handleCraft(recipe.id)} title={tooltip}>
                             <div className="flex items-center gap-2">
                               <ItemIcon itemId={recipe.result.item} size={32} />
                               <div className="flex-1 min-w-0">
@@ -777,8 +813,10 @@ function App() {
                             <div className="mt-1 flex flex-wrap gap-1">
                               {recipe.ingredients.map((ing, i) => {
                                 const hasEnough = countItem(ing.item) >= ing.count;
+                                const itemName = ITEM_TYPES[ing.item]?.name || ing.item;
+                                const itemTooltip = hasEnough ? `${itemName}: достаточно` : `${itemName}: нужно ещё ${ing.count - countItem(ing.item)}`;
                                 return (
-                                  <div key={i} className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] ${hasEnough ? 'bg-green-800/30 text-green-300' : 'bg-red-800/30 text-red-300'}`}>
+                                  <div key={i} className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] ${hasEnough ? 'bg-green-800/30 text-green-300' : 'bg-red-800/30 text-red-300'}`} title={itemTooltip}>
                                     <ItemIcon itemId={ing.item} size={12} />
                                     <span>{countItem(ing.item)}/{ing.count}</span>
                                   </div>
@@ -797,8 +835,21 @@ function App() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                       {CRAFT_RECIPES.filter(r => r.category === 'tools').map(recipe => {
                         const craftable = recipe.ingredients.every(ing => countItem(ing.item) >= ing.count);
+                        const needsWorkbench = recipe.requiresWorkbench && countItem('crafting_table') === 0;
+                        const missingItems = recipe.ingredients
+                          .filter(ing => countItem(ing.item) < ing.count)
+                          .map(ing => `${ITEM_TYPES[ing.item]?.name || ing.item}: ${ing.count - countItem(ing.item)}`)
+                          .join(', ');
+                        let tooltip = 'Можно скрафтить!';
+                        if (!craftable) {
+                          tooltip = `Не хватает: ${missingItems || 'материалов'}`;
+                        }
+                        if (needsWorkbench) {
+                          tooltip = 'Нужен верстак!';
+                        }
+                        
                         return (
-                          <div key={recipe.id} className={`rounded-lg p-2 border ${craftable ? 'border-green-500/50 bg-green-900/20 cursor-pointer hover:bg-green-900/30' : 'border-gray-600/30 bg-gray-800/30 opacity-60'}`} onClick={() => craftable && handleCraft(recipe.id)}>
+                          <div key={recipe.id} className={`rounded-lg p-2 border ${craftable && !needsWorkbench ? 'border-green-500/50 bg-green-900/20 cursor-pointer hover:bg-green-900/30' : 'border-gray-600/30 bg-gray-800/30 opacity-60'}`} onClick={() => craftable && !needsWorkbench && handleCraft(recipe.id)} title={tooltip}>
                             <div className="flex items-center gap-2">
                               <ItemIcon itemId={recipe.result.item} size={32} />
                               <div className="flex-1 min-w-0">
@@ -806,13 +857,15 @@ function App() {
                               <div className="text-gray-400 text-[10px] truncate">{recipe.description}</div>
                               {recipe.requiresWorkbench && <div className="text-orange-400 text-[10px]">🔨 Верстак</div>}
                               {recipe.requiresQuestion && <div className="text-yellow-400 text-[10px]">⚠️ Вопрос</div>}                              </div>
-                              {craftable && <div className="text-green-400 text-xs font-bold">✓</div>}
+                              {craftable && !needsWorkbench && <div className="text-green-400 text-xs font-bold">✓</div>}
                             </div>
                             <div className="mt-1 flex flex-wrap gap-1">
                               {recipe.ingredients.map((ing, i) => {
                                 const hasEnough = countItem(ing.item) >= ing.count;
+                                const itemName = ITEM_TYPES[ing.item]?.name || ing.item;
+                                const itemTooltip = hasEnough ? `${itemName}: достаточно` : `${itemName}: нужно ещё ${ing.count - countItem(ing.item)}`;
                                 return (
-                                  <div key={i} className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] ${hasEnough ? 'bg-green-800/30 text-green-300' : 'bg-red-800/30 text-red-300'}`}>
+                                  <div key={i} className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] ${hasEnough ? 'bg-green-800/30 text-green-300' : 'bg-red-800/30 text-red-300'}`} title={itemTooltip}>
                                     <ItemIcon itemId={ing.item} size={12} />
                                     <span>{countItem(ing.item)}/{ing.count}</span>
                                   </div>
@@ -831,21 +884,36 @@ function App() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                       {CRAFT_RECIPES.filter(r => r.category === 'building').map(recipe => {
                         const craftable = recipe.ingredients.every(ing => countItem(ing.item) >= ing.count);
+                        const needsWorkbench = recipe.requiresWorkbench && countItem('crafting_table') === 0;
+                        const missingItems = recipe.ingredients
+                          .filter(ing => countItem(ing.item) < ing.count)
+                          .map(ing => `${ITEM_TYPES[ing.item]?.name || ing.item}: ${ing.count - countItem(ing.item)}`)
+                          .join(', ');
+                        let tooltip = 'Можно скрафтить!';
+                        if (!craftable) {
+                          tooltip = `Не хватает: ${missingItems || 'материалов'}`;
+                        }
+                        if (needsWorkbench) {
+                          tooltip = 'Нужен верстак!';
+                        }
+                        
                         return (
-                          <div key={recipe.id} className={`rounded-lg p-2 border ${craftable ? 'border-green-500/50 bg-green-900/20 cursor-pointer hover:bg-green-900/30' : 'border-gray-600/30 bg-gray-800/30 opacity-60'}`} onClick={() => craftable && handleCraft(recipe.id)}>
+                          <div key={recipe.id} className={`rounded-lg p-2 border ${craftable && !needsWorkbench ? 'border-green-500/50 bg-green-900/20 cursor-pointer hover:bg-green-900/30' : 'border-gray-600/30 bg-gray-800/30 opacity-60'}`} onClick={() => craftable && !needsWorkbench && handleCraft(recipe.id)} title={tooltip}>
                             <div className="flex items-center gap-2">
                               <ItemIcon itemId={recipe.result.item} size={32} />
                               <div className="flex-1 min-w-0">
                                 <div className="text-white font-bold text-xs truncate">{recipe.name}</div>
                                 <div className="text-gray-400 text-[10px] truncate">{recipe.description}</div>
                               </div>
-                              {craftable && <div className="text-green-400 text-xs font-bold">✓</div>}
+                              {craftable && !needsWorkbench && <div className="text-green-400 text-xs font-bold">✓</div>}
                             </div>
                             <div className="mt-1 flex flex-wrap gap-1">
                               {recipe.ingredients.map((ing, i) => {
                                 const hasEnough = countItem(ing.item) >= ing.count;
+                                const itemName = ITEM_TYPES[ing.item]?.name || ing.item;
+                                const itemTooltip = hasEnough ? `${itemName}: достаточно` : `${itemName}: нужно ещё ${ing.count - countItem(ing.item)}`;
                                 return (
-                                  <div key={i} className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] ${hasEnough ? 'bg-green-800/30 text-green-300' : 'bg-red-800/30 text-red-300'}`}>
+                                  <div key={i} className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] ${hasEnough ? 'bg-green-800/30 text-green-300' : 'bg-red-800/30 text-red-300'}`} title={itemTooltip}>
                                     <ItemIcon itemId={ing.item} size={12} />
                                     <span>{countItem(ing.item)}/{ing.count}</span>
                                   </div>
@@ -865,21 +933,36 @@ function App() {
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                         {CRAFT_RECIPES.filter(r => r.category === 'special').map(recipe => {
                           const craftable = recipe.ingredients.every(ing => countItem(ing.item) >= ing.count);
+                          const needsWorkbench = recipe.requiresWorkbench && countItem('crafting_table') === 0;
+                          const missingItems = recipe.ingredients
+                            .filter(ing => countItem(ing.item) < ing.count)
+                            .map(ing => `${ITEM_TYPES[ing.item]?.name || ing.item}: ${ing.count - countItem(ing.item)}`)
+                            .join(', ');
+                          let tooltip = 'Можно скрафтить!';
+                          if (!craftable) {
+                            tooltip = `Не хватает: ${missingItems || 'материалов'}`;
+                          }
+                          if (needsWorkbench) {
+                            tooltip = 'Нужен верстак!';
+                          }
+                          
                           return (
-                            <div key={recipe.id} className={`rounded-lg p-2 border ${craftable ? 'border-purple-500/50 bg-purple-900/20 cursor-pointer hover:bg-purple-900/30' : 'border-gray-600/30 bg-gray-800/30 opacity-60'}`} onClick={() => craftable && handleCraft(recipe.id)}>
+                            <div key={recipe.id} className={`rounded-lg p-2 border ${craftable && !needsWorkbench ? 'border-purple-500/50 bg-purple-900/20 cursor-pointer hover:bg-purple-900/30' : 'border-gray-600/30 bg-gray-800/30 opacity-60'}`} onClick={() => craftable && !needsWorkbench && handleCraft(recipe.id)} title={tooltip}>
                               <div className="flex items-center gap-2">
                                 <ItemIcon itemId={recipe.result.item} size={32} />
                                 <div className="flex-1 min-w-0">
                                   <div className="text-white font-bold text-xs truncate">{recipe.name}</div>
                                   <div className="text-gray-400 text-[10px] truncate">{recipe.description}</div>
                                 </div>
-                                {craftable && <div className="text-purple-400 text-xs font-bold">✓</div>}
+                                {craftable && !needsWorkbench && <div className="text-purple-400 text-xs font-bold">✓</div>}
                               </div>
                               <div className="mt-1 flex flex-wrap gap-1">
                                 {recipe.ingredients.map((ing, i) => {
                                   const hasEnough = countItem(ing.item) >= ing.count;
+                                  const itemName = ITEM_TYPES[ing.item]?.name || ing.item;
+                                  const itemTooltip = hasEnough ? `${itemName}: достаточно` : `${itemName}: нужно ещё ${ing.count - countItem(ing.item)}`;
                                   return (
-                                    <div key={i} className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] ${hasEnough ? 'bg-purple-800/30 text-purple-300' : 'bg-red-800/30 text-red-300'}`}>
+                                    <div key={i} className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] ${hasEnough ? 'bg-purple-800/30 text-purple-300' : 'bg-red-800/30 text-red-300'}`} title={itemTooltip}>
                                       <ItemIcon itemId={ing.item} size={12} />
                                       <span>{countItem(ing.item)}/{ing.count}</span>
                                     </div>

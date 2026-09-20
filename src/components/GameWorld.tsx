@@ -28,6 +28,8 @@ export default function GameWorld({
   const eulerRef = useRef(new THREE.Euler(0, 0, 0, 'YXZ'));
   const pickaxeRef = useRef<THREE.Group | null>(null);
   const pickaxeSwingRef = useRef({ swinging: false, time: 0 });
+  const heldItemRef = useRef<THREE.Group | null>(null);
+  const currentHeldItemRef = useRef<string | null>(null);
   const worldDataRef = useRef<WorldBlock[][][]>([]);
   const instancedMeshesRef = useRef<Map<string, { mesh: THREE.InstancedMesh; positions: Map<string, number>; originalColors: Map<string, THREE.Color> }>>(new Map());
   const raycasterRef = useRef(new THREE.Raycaster());
@@ -57,6 +59,72 @@ export default function GameWorld({
   useEffect(() => { onPortalActivatedRef.current = onPortalActivated; }, [onPortalActivated]);
 
   const getBlockKey = (x: number, y: number, z: number) => `${x},${y},${z}`;
+
+  // Update held item based on selected slot
+  const updateHeldItem = useCallback(() => {
+    if (!heldItemRef.current) return;
+    
+    const selectedItem = hotbarRef.current[selectedSlotRef.current];
+    
+    // Clear previous item
+    while (heldItemRef.current.children.length > 0) {
+      const child = heldItemRef.current.children[0];
+      heldItemRef.current.remove(child);
+      if (child instanceof THREE.Mesh) {
+        child.geometry.dispose();
+        if (Array.isArray(child.material)) {
+          child.material.forEach(m => m.dispose());
+        } else {
+          child.material.dispose();
+        }
+      }
+    }
+    
+    // Create new item based on selection
+    if (!selectedItem) {
+      // Empty hand - show small cube
+      const handGeo = new THREE.BoxGeometry(0.15, 0.15, 0.15);
+      const handMat = new THREE.MeshLambertMaterial({ color: 0xFFDBAC });
+      const hand = new THREE.Mesh(handGeo, handMat);
+      hand.position.set(0, 0, 0);
+      heldItemRef.current.add(hand);
+    } else if (selectedItem.includes('pickaxe')) {
+      // Pickaxe
+      const handleGeo = new THREE.BoxGeometry(0.06, 0.55, 0.06);
+      const handleMat = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
+      const handle = new THREE.Mesh(handleGeo, handleMat);
+      handle.position.set(0, -0.1, 0);
+      heldItemRef.current.add(handle);
+      
+      const headGeo = new THREE.BoxGeometry(0.3, 0.08, 0.08);
+      let headColor = 0x888888;
+      if (selectedItem === 'wood_pickaxe') headColor = 0xD2691E;
+      else if (selectedItem === 'stone_pickaxe') headColor = 0x808080;
+      else if (selectedItem === 'iron_pickaxe') headColor = 0xC0C0C0;
+      else if (selectedItem === 'diamond_pickaxe') headColor = 0x4DD0E1;
+      
+      const headMat = new THREE.MeshPhongMaterial({ color: headColor, shininess: 80 });
+      const head = new THREE.Mesh(headGeo, headMat);
+      head.position.set(0.1, 0.18, 0);
+      heldItemRef.current.add(head);
+    } else if (selectedItem === 'stick') {
+      // Stick
+      const stickGeo = new THREE.BoxGeometry(0.05, 0.6, 0.05);
+      const stickMat = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
+      const stick = new THREE.Mesh(stickGeo, stickMat);
+      stick.position.set(0, 0, 0);
+      heldItemRef.current.add(stick);
+    } else {
+      // Other item - show as colored cube
+      const itemGeo = new THREE.BoxGeometry(0.2, 0.2, 0.2);
+      const itemMat = new THREE.MeshLambertMaterial({ color: 0xAAAAAA });
+      const item = new THREE.Mesh(itemGeo, itemMat);
+      item.position.set(0, 0, 0);
+      heldItemRef.current.add(item);
+    }
+    
+    currentHeldItemRef.current = selectedItem;
+  }, []);
 
   // Create textured material
   const createTexturedMaterial = useCallback((color: number): THREE.MeshLambertMaterial => {
@@ -198,23 +266,14 @@ export default function GameWorld({
       instancedMeshesRef.current.set(type, { mesh: instancedMesh, positions: positionMap, originalColors });
     });
 
-    // Pickaxe
-    const pickaxe = new THREE.Group();
-    const handleGeo = new THREE.BoxGeometry(0.06, 0.55, 0.06);
-    const handleMat = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
-    const handle = new THREE.Mesh(handleGeo, handleMat);
-    handle.position.set(0, -0.1, 0);
-    pickaxe.add(handle);
-    const headGeo = new THREE.BoxGeometry(0.3, 0.08, 0.08);
-    const headMat = new THREE.MeshPhongMaterial({ color: 0x888888, shininess: 80 });
-    const head = new THREE.Mesh(headGeo, headMat);
-    head.position.set(0.1, 0.18, 0);
-    pickaxe.add(head);
-    pickaxe.position.set(0.45, -0.35, -0.5);
-    pickaxe.rotation.set(0, 0.3, -0.6);
-    camera.add(pickaxe);
+    // Held item group (will be updated dynamically)
+    const heldItem = new THREE.Group();
+    heldItem.position.set(0.45, -0.35, -0.5);
+    heldItem.rotation.set(0, 0.3, -0.6);
+    camera.add(heldItem);
     scene.add(camera);
-    pickaxeRef.current = pickaxe;
+    heldItemRef.current = heldItem;
+    pickaxeRef.current = heldItem;
 
     // Player spawn
     const spawnX = Math.floor(WORLD_SIZE / 2);
@@ -222,6 +281,9 @@ export default function GameWorld({
     const spawnY = getSurfaceHeight(worldData, spawnX, spawnZ) + 2;
     camera.position.set(spawnX + 0.5, spawnY + 1.5, spawnZ + 0.5);
     playerPosition.current.copy(camera.position);
+
+    // Initialize held item
+    updateHeldItem();
 
     // Portal
     const portalX = WORLD_SIZE - 5;
@@ -532,6 +594,11 @@ export default function GameWorld({
         velocityRef.current.set(0, 0, 0);
       }
       playerPosition.current.copy(camera.position);
+
+      // Update held item if slot changed
+      if (currentHeldItemRef.current !== hotbarRef.current[selectedSlotRef.current]) {
+        updateHeldItem();
+      }
 
       // Pickaxe animation - very smooth and slow
       if (pickaxeRef.current) {
