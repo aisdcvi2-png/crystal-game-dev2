@@ -239,6 +239,57 @@ export default function GameWorld({
     portalLight.position.set(portalX + 0.5, portalY, portalZ + 0.5);
     scene.add(portalLight);
 
+    // NPCs - static characters
+    const npcPositions = [
+      { x: 15, z: 15, color: 0x4CAF50 }, // Green NPC
+      { x: 45, z: 20, color: 0x2196F3 }, // Blue NPC
+      { x: 30, z: 50, color: 0xFF9800 }, // Orange NPC
+    ];
+
+    npcPositions.forEach(npcPos => {
+      const npcY = getSurfaceHeight(worldData, npcPos.x, npcPos.z) + 1;
+      
+      // NPC body
+      const npcGroup = new THREE.Group();
+      
+      // Head
+      const headGeo = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+      const headMat = new THREE.MeshLambertMaterial({ color: 0xFFDBAC });
+      const head = new THREE.Mesh(headGeo, headMat);
+      head.position.y = 1.7;
+      npcGroup.add(head);
+      
+      // Body
+      const bodyGeo = new THREE.BoxGeometry(0.5, 0.7, 0.3);
+      const bodyMat = new THREE.MeshLambertMaterial({ color: npcPos.color });
+      const body = new THREE.Mesh(bodyGeo, bodyMat);
+      body.position.y = 1.1;
+      npcGroup.add(body);
+      
+      // Arms
+      const armGeo = new THREE.BoxGeometry(0.2, 0.6, 0.2);
+      const armMat = new THREE.MeshLambertMaterial({ color: npcPos.color });
+      const leftArm = new THREE.Mesh(armGeo, armMat);
+      leftArm.position.set(-0.35, 1.1, 0);
+      npcGroup.add(leftArm);
+      const rightArm = new THREE.Mesh(armGeo, armMat);
+      rightArm.position.set(0.35, 1.1, 0);
+      npcGroup.add(rightArm);
+      
+      // Legs
+      const legGeo = new THREE.BoxGeometry(0.2, 0.6, 0.2);
+      const legMat = new THREE.MeshLambertMaterial({ color: 0x3D5A80 });
+      const leftLeg = new THREE.Mesh(legGeo, legMat);
+      leftLeg.position.set(-0.15, 0.4, 0);
+      npcGroup.add(leftLeg);
+      const rightLeg = new THREE.Mesh(legGeo, legMat);
+      rightLeg.position.set(0.15, 0.4, 0);
+      npcGroup.add(rightLeg);
+      
+      npcGroup.position.set(npcPos.x + 0.5, npcY, npcPos.z + 0.5);
+      scene.add(npcGroup);
+    });
+
     // Events
     const handleKeyDown = (e: KeyboardEvent) => { keysRef.current[e.code] = true; };
     const handleKeyUp = (e: KeyboardEvent) => { keysRef.current[e.code] = false; };
@@ -482,29 +533,37 @@ export default function GameWorld({
       }
       playerPosition.current.copy(camera.position);
 
-      // Pickaxe animation - slower and smoother
+      // Pickaxe animation - very smooth and slow
       if (pickaxeRef.current) {
         if (pickaxeSwingRef.current.swinging) {
-          pickaxeSwingRef.current.time += 0.08; // Slower animation (was 0.18)
+          pickaxeSwingRef.current.time += 0.05; // Very slow animation
           const t = pickaxeSwingRef.current.time;
           
-          // Smoother swing with easing
-          const swingAngle = Math.sin(t * Math.PI) * 1.2;
-          const tiltAngle = Math.sin(t * Math.PI * 0.5) * 0.3;
+          // Smooth easing function (ease-in-out)
+          const easeInOut = (x: number) => x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2;
+          const easedT = easeInOut(t);
+          
+          // Smooth swing with easing
+          const swingAngle = Math.sin(easedT * Math.PI) * 1.0;
+          const tiltAngle = Math.sin(easedT * Math.PI * 0.5) * 0.2;
+          const liftAngle = Math.sin(easedT * Math.PI) * 0.15;
           
           pickaxeRef.current.rotation.x = -swingAngle;
           pickaxeRef.current.rotation.z = -0.6 + tiltAngle;
+          pickaxeRef.current.position.y = -0.35 + liftAngle;
           
           if (t >= 1) {
             pickaxeSwingRef.current.swinging = false;
             pickaxeSwingRef.current.time = 0;
             pickaxeRef.current.rotation.x = 0;
             pickaxeRef.current.rotation.z = -0.6;
+            pickaxeRef.current.position.y = -0.35;
           }
         } else {
-          // Idle animation - gentle bobbing
-          pickaxeRef.current.rotation.x = Math.sin(time * 1.5) * 0.03;
-          pickaxeRef.current.position.y = -0.35 + Math.sin(time * 2) * 0.01;
+          // Idle animation - very gentle bobbing
+          pickaxeRef.current.rotation.x = Math.sin(time * 1.2) * 0.02;
+          pickaxeRef.current.rotation.z = -0.6 + Math.sin(time * 1.5) * 0.01;
+          pickaxeRef.current.position.y = -0.35 + Math.sin(time * 1.8) * 0.008;
         }
       }
 
@@ -533,19 +592,25 @@ export default function GameWorld({
         
         if (hitBlock && !BLOCK_TYPES[hitBlock.block.type]?.unbreakable) {
           if (swingCooldownRef.current <= 0 && !pickaxeSwingRef.current.swinging) {
-            pickaxeSwingRef.current.swinging = true;
-            pickaxeSwingRef.current.time = 0;
-            swingCooldownRef.current = 0.8; // Slower mining - 0.8 seconds between hits
-            
-            // Get tool damage from equipped item
+            // Check if equipped item can mine (hand, pickaxe, or stick)
             const selectedItem = hotbarRef.current[selectedSlotRef.current];
-            let toolDamage = 1; // Hand damage
-            if (selectedItem) {
-              const itemData = ITEM_TYPES[selectedItem];
-              if (itemData?.toolDamage) {
-                toolDamage = itemData.toolDamage;
+            const canMine = !selectedItem || 
+                           selectedItem === 'stick' || 
+                           selectedItem?.includes('pickaxe');
+            
+            if (canMine) {
+              pickaxeSwingRef.current.swinging = true;
+              pickaxeSwingRef.current.time = 0;
+              swingCooldownRef.current = 0.8; // Slower mining - 0.8 seconds between hits
+              
+              // Get tool damage from equipped item
+              let toolDamage = 1; // Hand damage
+              if (selectedItem) {
+                const itemData = ITEM_TYPES[selectedItem];
+                if (itemData?.toolDamage) {
+                  toolDamage = itemData.toolDamage;
+                }
               }
-            }
             
             hitBlock.block.health -= toolDamage;
             const blockTypeData = BLOCK_TYPES[hitBlock.block.type];
@@ -586,6 +651,7 @@ export default function GameWorld({
               revealNeighbors(hitBlock.x, hitBlock.y, hitBlock.z);
               onBlockMined(hitBlock.block.type, hitBlock.x, hitBlock.y, hitBlock.z);
             }
+            } // end if (canMine)
           }
         }
       }

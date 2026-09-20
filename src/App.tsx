@@ -1,8 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import * as THREE from 'three';
 import GameWorld from './components/GameWorld';
-import { subjects, Question } from './data/questions';
-import { generateDynamicQuestions } from './data/dynamicQuestions';
+import { questions, subjects, Question } from './data/questions';
 import { BLOCK_TYPES, ITEM_TYPES, CRAFT_RECIPES, TOOL_DURABILITY } from './data/gameData';
 import ItemIcon from './components/ItemIcon';
 
@@ -100,10 +99,30 @@ function StartScreen({ onStart }: { onStart: () => void }) {
         </h1>
         <p className="text-lg text-green-200 mb-6">Исследуй мир, собирай кристаллы, отвечай на вопросы!</p>
         <div className="text-5xl mb-6 flex items-center justify-center gap-3">
-          <span className="animate-bounce" style={{ animationDelay: '0s' }}>⛏️</span>
-          <span className="animate-bounce" style={{ animationDelay: '0.15s' }}>💎</span>
-          <span className="animate-bounce" style={{ animationDelay: '0.3s' }}>🪨</span>
-          <span className="animate-bounce" style={{ animationDelay: '0.45s' }}>📚</span>
+          <div className="animate-bounce" style={{ animationDelay: '0s' }}>
+            <svg width="48" height="48" viewBox="0 0 32 32">
+              <rect x="14" y="14" width="4" height="14" fill="#8B4513"/>
+              <rect x="8" y="8" width="16" height="6" fill="#808080"/>
+            </svg>
+          </div>
+          <div className="animate-bounce" style={{ animationDelay: '0.15s' }}>
+            <svg width="48" height="48" viewBox="0 0 32 32">
+              <polygon points="16,4 24,12 20,28 12,28 8,12" fill="#E040FB"/>
+            </svg>
+          </div>
+          <div className="animate-bounce" style={{ animationDelay: '0.3s' }}>
+            <svg width="48" height="48" viewBox="0 0 32 32">
+              <rect x="4" y="4" width="24" height="24" fill="#808080"/>
+              <rect x="6" y="6" width="8" height="8" fill="#A0A0A0"/>
+            </svg>
+          </div>
+          <div className="animate-bounce" style={{ animationDelay: '0.45s' }}>
+            <svg width="48" height="48" viewBox="0 0 32 32">
+              <rect x="4" y="4" width="24" height="24" fill="#8B4513"/>
+              <line x1="4" y1="12" x2="28" y2="12" stroke="#654321" stroke-width="2"/>
+              <line x1="4" y1="20" x2="28" y2="20" stroke="#654321" stroke-width="2"/>
+            </svg>
+          </div>
         </div>
         <div className="bg-gray-900/70 backdrop-blur-sm border border-green-500/30 rounded-2xl p-5 mb-6">
           <p className="text-gray-200 text-base leading-relaxed mb-4">
@@ -172,8 +191,8 @@ function App() {
   const [pendingCrystalId, setPendingCrystalId] = useState<number | null>(null);
   const [toolDurability, setToolDurability] = useState<Record<string, number>>({ wood_pickaxe: TOOL_DURABILITY.wood });
   const [dragItem, setDragItem] = useState<{ item: string; from: 'hotbar' | 'inventory'; index: number } | null>(null);
+  const [dragOverSlot, setDragOverSlot] = useState<{ from: 'hotbar' | 'inventory'; index: number } | null>(null);
   const [portalActivated, setPortalActivated] = useState(false);
-  const [dynamicQuestions, setDynamicQuestions] = useState<Question[]>([]);
 
   const playerPosition = useRef(new THREE.Vector3(0, 3, 0));
   const subjectIndexRef = useRef(0);
@@ -252,16 +271,16 @@ function App() {
   }, [hotbar, inventory]);
 
   const getNextQuestion = useCallback((): Question | null => {
-    const unanswered = dynamicQuestions.filter(q => !answeredIds.includes(q.id));
+    const unanswered = questions.filter(q => !answeredIds.includes(q.id));
     if (unanswered.length === 0) return null;
     const currentSubjectName = subjects[subjectIndexRef.current % subjects.length].name;
     const subjectQuestions = unanswered.filter(q => q.subject === currentSubjectName);
     if (subjectQuestions.length > 0) return subjectQuestions[Math.floor(Math.random() * subjectQuestions.length)];
     subjectIndexRef.current++;
-    const remaining = dynamicQuestions.filter(q => !answeredIds.includes(q.id));
+    const remaining = questions.filter(q => !answeredIds.includes(q.id));
     if (remaining.length > 0) return remaining[Math.floor(Math.random() * remaining.length)];
     return null;
-  }, [answeredIds, dynamicQuestions]);
+  }, [answeredIds]);
 
   const handleBlockMined = useCallback((blockType: string, x: number, y: number, z: number) => {
     const blockData = BLOCK_TYPES[blockType];
@@ -309,10 +328,6 @@ function App() {
   }, [getNextQuestion]);
 
   const handleStart = () => {
-    // Generate dynamic questions with random seed
-    const seed = Math.floor(Math.random() * 100000);
-    const questions = generateDynamicQuestions(seed);
-    setDynamicQuestions(questions);
     setGameState('playing');
     setCurrentSubject(subjects[0].name);
   };
@@ -389,7 +404,6 @@ function App() {
     setSelectedSlot(0); setDroppedCrystals([]); setPendingCrystalId(null);
     setToolDurability({ wood_pickaxe: TOOL_DURABILITY.wood }); subjectIndexRef.current = 0;
     setPortalActivated(false);
-    setDynamicQuestions([]);
   };
 
   // Keyboard handler
@@ -452,6 +466,87 @@ function App() {
         setDragItem({ item, from, index });
       }
     }
+  };
+
+  // Drag and drop handlers
+  const handleDragStart = (item: string, index: number, from: 'hotbar' | 'inventory') => {
+    setDragItem({ item, from, index });
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number, from: 'hotbar' | 'inventory') => {
+    e.preventDefault();
+    setDragOverSlot({ from, index });
+  };
+
+  const handleDragLeave = () => {
+    setDragOverSlot(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, index: number, from: 'hotbar' | 'inventory') => {
+    e.preventDefault();
+    setDragOverSlot(null);
+    
+    if (!dragItem) return;
+    
+    const targetItem = from === 'hotbar' ? hotbar[index] : inventory[index];
+    
+    if (!targetItem) {
+      // Empty slot - move item here
+      if (from === 'hotbar') {
+        const newHotbar = [...hotbar];
+        newHotbar[index] = dragItem.item;
+        
+        if (dragItem.from === 'hotbar') {
+          newHotbar[dragItem.index] = null;
+        } else {
+          const newInventory = [...inventory];
+          newInventory[dragItem.index] = null;
+          setInventory(newInventory);
+        }
+        setHotbar(newHotbar);
+      } else {
+        const newInventory = [...inventory];
+        newInventory[index] = dragItem.item;
+        
+        if (dragItem.from === 'hotbar') {
+          const newHotbar = [...hotbar];
+          newHotbar[dragItem.index] = null;
+          setHotbar(newHotbar);
+        } else {
+          newInventory[dragItem.index] = null;
+        }
+        setInventory(newInventory);
+      }
+    } else {
+      // Occupied slot - swap items
+      if (dragItem.from === 'hotbar' && from === 'hotbar') {
+        const newHotbar = [...hotbar];
+        newHotbar[dragItem.index] = targetItem;
+        newHotbar[index] = dragItem.item;
+        setHotbar(newHotbar);
+      } else if (dragItem.from === 'inventory' && from === 'inventory') {
+        const newInventory = [...inventory];
+        newInventory[dragItem.index] = targetItem;
+        newInventory[index] = dragItem.item;
+        setInventory(newInventory);
+      } else if (dragItem.from === 'hotbar' && from === 'inventory') {
+        const newHotbar = [...hotbar];
+        newHotbar[dragItem.index] = targetItem;
+        setHotbar(newHotbar);
+        const newInventory = [...inventory];
+        newInventory[index] = dragItem.item;
+        setInventory(newInventory);
+      } else {
+        const newInventory = [...inventory];
+        newInventory[dragItem.index] = targetItem;
+        setInventory(newInventory);
+        const newHotbar = [...hotbar];
+        newHotbar[index] = dragItem.item;
+        setHotbar(newHotbar);
+      }
+    }
+    
+    setDragItem(null);
   };
 
   return (
@@ -606,10 +701,23 @@ function App() {
                     {hotbar.map((item, i) => {
                       const itemData = item ? ITEM_TYPES[item] : null;
                       const isSelected = dragItem && dragItem.item === item && dragItem.from === 'hotbar' && dragItem.index === i;
+                      const isDragOver = dragOverSlot && dragOverSlot.from === 'hotbar' && dragOverSlot.index === i;
                       return (
-                        <div key={i} onClick={() => handleSlotClick(item, i, 'hotbar')}
-                          className={`w-14 h-14 rounded-lg border-2 flex items-center justify-center relative cursor-pointer transition-all ${isSelected ? 'border-yellow-400 bg-yellow-900/30 scale-110' : 'border-amber-500/50 bg-gray-800/80'} hover:border-white/50 hover:bg-gray-700/80`}>
+                        <div key={i} 
+                          onClick={() => handleSlotClick(item, i, 'hotbar')}
+                          draggable={!!item}
+                          onDragStart={() => item && handleDragStart(item, i, 'hotbar')}
+                          onDragOver={(e) => handleDragOver(e, i, 'hotbar')}
+                          onDragLeave={handleDragLeave}
+                          onDrop={(e) => handleDrop(e, i, 'hotbar')}
+                          className={`w-14 h-14 rounded-lg border-2 flex items-center justify-center relative cursor-pointer transition-all ${isSelected ? 'border-yellow-400 bg-yellow-900/30 scale-110' : isDragOver ? 'border-blue-400 bg-blue-900/30' : 'border-amber-500/50 bg-gray-800/80'} hover:border-white/50 hover:bg-gray-700/80 group`}
+                          title={itemData ? `${itemData.name}\n${itemData.description}` : 'Пусто'}>
                           {itemData && item && <ItemIcon itemId={item} size={36} />}
+                          {itemData && (
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
+                              {itemData.name}
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -623,10 +731,23 @@ function App() {
                     {inventory.map((item, i) => {
                       const itemData = item ? ITEM_TYPES[item] : null;
                       const isSelected = dragItem && dragItem.item === item && dragItem.from === 'inventory' && dragItem.index === i;
+                      const isDragOver = dragOverSlot && dragOverSlot.from === 'inventory' && dragOverSlot.index === i;
                       return (
-                        <div key={i} onClick={() => handleSlotClick(item, i, 'inventory')}
-                          className={`w-14 h-14 rounded-lg border-2 flex items-center justify-center relative cursor-pointer transition-all ${isSelected ? 'border-yellow-400 bg-yellow-900/30 scale-110' : 'border-gray-600/50 bg-gray-800/60'} hover:border-white/50 hover:bg-gray-700/80`}>
+                        <div key={i} 
+                          onClick={() => handleSlotClick(item, i, 'inventory')}
+                          draggable={!!item}
+                          onDragStart={() => item && handleDragStart(item, i, 'inventory')}
+                          onDragOver={(e) => handleDragOver(e, i, 'inventory')}
+                          onDragLeave={handleDragLeave}
+                          onDrop={(e) => handleDrop(e, i, 'inventory')}
+                          className={`w-14 h-14 rounded-lg border-2 flex items-center justify-center relative cursor-pointer transition-all ${isSelected ? 'border-yellow-400 bg-yellow-900/30 scale-110' : isDragOver ? 'border-blue-400 bg-blue-900/30' : 'border-gray-600/50 bg-gray-800/60'} hover:border-white/50 hover:bg-gray-700/80 group`}
+                          title={itemData ? `${itemData.name}\n${itemData.description}` : 'Пусто'}>
                           {itemData && item && <ItemIcon itemId={item} size={36} />}
+                          {itemData && (
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10">
+                              {itemData.name}
+                            </div>
+                          )}
                         </div>
                       );
                     })}
