@@ -42,16 +42,16 @@ export const TOOL_DURABILITY = {
 // Block definitions
 export const BLOCK_TYPES: Record<string, BlockType> = {
   bedrock: { id: 'bedrock', name: 'Бедрок', color: 0x1a1a1a, hardness: 999, unbreakable: true },
-  stone: { id: 'stone', name: 'Камень', color: 0x7f7f7f, hardness: 4, drops: [{ item: 'cobblestone', count: 1, chance: 1 }], rareDrops: [{ item: 'crystal', count: 1, chance: 0.15 }] },
-  coal_ore: { id: 'coal_ore', name: 'Угольная руда', color: 0x4a4a4a, hardness: 4, drops: [{ item: 'coal', count: 1, chance: 1 }], rareDrops: [{ item: 'crystal', count: 1, chance: 0.25 }] },
-  iron_ore: { id: 'iron_ore', name: 'Железная руда', color: 0x8a7060, hardness: 5, drops: [{ item: 'iron_ore_item', count: 1, chance: 1 }], rareDrops: [{ item: 'crystal', count: 1, chance: 0.35 }] },
-  gold_ore: { id: 'gold_ore', name: 'Золотая руда', color: 0x9a8a50, hardness: 5, drops: [{ item: 'gold_ore_item', count: 1, chance: 1 }], rareDrops: [{ item: 'crystal', count: 1, chance: 0.45 }] },
-  diamond_ore: { id: 'diamond_ore', name: 'Алмазная руда', color: 0x5a8a8a, hardness: 6, drops: [{ item: 'diamond', count: 1, chance: 1 }], rareDrops: [{ item: 'crystal', count: 1, chance: 0.60 }] },
-  dirt: { id: 'dirt', name: 'Земля', color: 0x8B6914, hardness: 2, drops: [{ item: 'dirt_block', count: 1, chance: 1 }] },
-  grass: { id: 'grass', name: 'Трава', color: 0x5a9e3a, hardness: 2, drops: [{ item: 'dirt_block', count: 1, chance: 1 }], rareDrops: [{ item: 'seeds', count: 1, chance: 0.2 }] },
-  sand: { id: 'sand', name: 'Песок', color: 0xd4c475, hardness: 1, drops: [{ item: 'sand_block', count: 1, chance: 1 }] },
-  oak_log: { id: 'oak_log', name: 'Дуб', color: 0x6B4226, hardness: 3, drops: [{ item: 'oak_log_item', count: 1, chance: 1 }] },
-  oak_leaves: { id: 'oak_leaves', name: 'Листва', color: 0x2d7a2d, hardness: 1, rareDrops: [{ item: 'stick', count: 1, chance: 0.2 }] },
+  stone: { id: 'stone', name: 'Камень', color: 0x7f7f7f, hardness: 8, drops: [{ item: 'cobblestone', count: 1, chance: 1 }], rareDrops: [{ item: 'crystal', count: 1, chance: 0.30 }] },
+  coal_ore: { id: 'coal_ore', name: 'Угольная руда', color: 0x4a4a4a, hardness: 8, drops: [{ item: 'coal', count: 1, chance: 1 }], rareDrops: [{ item: 'crystal', count: 1, chance: 0.50 }] },
+  iron_ore: { id: 'iron_ore', name: 'Железная руда', color: 0x8a7060, hardness: 10, drops: [{ item: 'iron_ore_item', count: 1, chance: 1 }], rareDrops: [{ item: 'crystal', count: 1, chance: 0.70 }] },
+  gold_ore: { id: 'gold_ore', name: 'Золотая руда', color: 0x9a8a50, hardness: 10, drops: [{ item: 'gold_ore_item', count: 1, chance: 1 }], rareDrops: [{ item: 'crystal', count: 1, chance: 0.85 }] },
+  diamond_ore: { id: 'diamond_ore', name: 'Алмазная руда', color: 0x5a8a8a, hardness: 12, drops: [{ item: 'diamond', count: 1, chance: 1 }], rareDrops: [{ item: 'crystal', count: 1, chance: 1.0 }] },
+  dirt: { id: 'dirt', name: 'Земля', color: 0x8B6914, hardness: 4, drops: [{ item: 'dirt_block', count: 1, chance: 1 }] },
+  grass: { id: 'grass', name: 'Трава', color: 0x5a9e3a, hardness: 4, drops: [{ item: 'dirt_block', count: 1, chance: 1 }], rareDrops: [{ item: 'seeds', count: 1, chance: 0.2 }] },
+  sand: { id: 'sand', name: 'Песок', color: 0xd4c475, hardness: 3, drops: [{ item: 'sand_block', count: 1, chance: 1 }] },
+  oak_log: { id: 'oak_log', name: 'Дуб', color: 0x6B4226, hardness: 6, drops: [{ item: 'oak_log_item', count: 1, chance: 1 }] },
+  oak_leaves: { id: 'oak_leaves', name: 'Листва', color: 0x2d7a2d, hardness: 2, rareDrops: [{ item: 'stick', count: 1, chance: 0.2 }] },
 };
 
 // Item definitions
@@ -93,7 +93,7 @@ export const CRAFT_RECIPES: CraftRecipe[] = [
 
 // World generation
 export const WORLD_SIZE = 64;
-export const WORLD_HEIGHT = 16;
+export const WORLD_HEIGHT = 32;
 
 export interface WorldBlock {
   type: string;
@@ -168,10 +168,10 @@ export function generateWorld(seed?: number): WorldBlock[][][] {
           type = 'bedrock';
         } else if (y < height - 2) {
           const oreChance = noise(x * 2 + y, z * 3 + y, worldSeed + y * 5);
-          if (oreChance > 0.88) type = 'diamond_ore';
-          else if (oreChance > 0.78) type = 'gold_ore';
-          else if (oreChance > 0.65) type = 'iron_ore';
-          else if (oreChance > 0.50) type = 'coal_ore';
+          if (oreChance > 0.80) type = 'diamond_ore';
+          else if (oreChance > 0.65) type = 'gold_ore';
+          else if (oreChance > 0.45) type = 'iron_ore';
+          else if (oreChance > 0.25) type = 'coal_ore';
           else type = 'stone';
         } else if (y < height) {
           type = 'dirt';

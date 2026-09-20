@@ -157,12 +157,17 @@ export default function GameWorld({
       }
     }
 
-    // Create InstancedMesh for each block type
+    // Create InstancedMesh for each block type with maximum capacity
     const matrix = new THREE.Matrix4();
+    const maxBlocksPerType = WORLD_SIZE * WORLD_SIZE * WORLD_HEIGHT;
+    
     blocksByType.forEach((positions, type) => {
       const blockType = BLOCK_TYPES[type];
       const material = createTexturedMaterial(blockType.color);
-      const instancedMesh = new THREE.InstancedMesh(blockGeo, material, positions.length);
+      
+      // Create instanced mesh with maximum capacity
+      const instancedMesh = new THREE.InstancedMesh(blockGeo, material, maxBlocksPerType);
+      instancedMesh.count = positions.length; // Only render visible blocks
       
       const positionMap = new Map<string, number>();
       positions.forEach((pos, index) => {
@@ -257,6 +262,45 @@ export default function GameWorld({
     document.addEventListener('pointerlockchange', handlePointerLockChange);
     window.addEventListener('resize', handleResize);
 
+    // Reveal neighboring blocks when a block is removed
+    const revealNeighbors = (x: number, y: number, z: number) => {
+      const directions = [
+        [1, 0, 0], [-1, 0, 0],
+        [0, 1, 0], [0, -1, 0],
+        [0, 0, 1], [0, 0, -1]
+      ];
+
+      directions.forEach(([dx, dy, dz]) => {
+        const nx = x + dx;
+        const ny = y + dy;
+        const nz = z + dz;
+
+        if (nx < 0 || nx >= WORLD_SIZE || ny < 0 || ny >= WORLD_HEIGHT || nz < 0 || nz >= WORLD_SIZE) {
+          return;
+        }
+
+        const neighborBlock = worldData[nx][nz][ny];
+        if (!neighborBlock) return;
+
+        const key = getBlockKey(nx, ny, nz);
+        const typeData = instancedMeshesRef.current.get(neighborBlock.type);
+        
+        if (typeData && !typeData.positions.has(key)) {
+          // This neighbor block should now be visible
+          // Use current count as the new index and increment count
+          const newIndex = typeData.mesh.count;
+          
+          matrix.identity();
+          matrix.setPosition(nx + 0.5, ny + 0.5, nz + 0.5);
+          typeData.mesh.setMatrixAt(newIndex, matrix);
+          typeData.mesh.instanceMatrix.needsUpdate = true;
+          
+          typeData.mesh.count++;
+          typeData.positions.set(key, newIndex);
+        }
+      });
+    };
+
     // Remove block from instanced mesh
     const removeBlock = (x: number, y: number, z: number) => {
       const key = getBlockKey(x, y, z);
@@ -267,9 +311,9 @@ export default function GameWorld({
       if (typeData) {
         const instanceIndex = typeData.positions.get(key);
         if (instanceIndex !== undefined) {
-          // Hide instance by scaling to 0
-          matrix.setPosition(0, -1000, 0);
-          matrix.makeScale(0, 0, 0);
+          // Hide instance by moving it far away
+          matrix.identity();
+          matrix.setPosition(0, -10000, 0);
           typeData.mesh.setMatrixAt(instanceIndex, matrix);
           typeData.mesh.instanceMatrix.needsUpdate = true;
           typeData.positions.delete(key);
@@ -300,14 +344,26 @@ export default function GameWorld({
       const typeData = instancedMeshesRef.current.get(type);
       if (!typeData) return;
 
-      // Find next available instance or create new one
-      const newIndex = typeData.positions.size;
-      matrix.setPosition(x + 0.5, y + 0.5, z + 0.5);
-      matrix.makeScale(1, 1, 1);
-      
-      // We need to resize the instanced mesh - for simplicity, we'll just update existing
-      // In production, you'd need to handle dynamic resizing
       const key = getBlockKey(x, y, z);
+      
+      // If block already exists, just update position
+      if (typeData.positions.has(key)) {
+        const index = typeData.positions.get(key)!;
+        matrix.identity();
+        matrix.setPosition(x + 0.5, y + 0.5, z + 0.5);
+        typeData.mesh.setMatrixAt(index, matrix);
+        typeData.mesh.instanceMatrix.needsUpdate = true;
+        return;
+      }
+
+      // Add new block instance
+      const newIndex = typeData.mesh.count;
+      matrix.identity();
+      matrix.setPosition(x + 0.5, y + 0.5, z + 0.5);
+      typeData.mesh.setMatrixAt(newIndex, matrix);
+      typeData.mesh.instanceMatrix.needsUpdate = true;
+      
+      typeData.mesh.count++;
       typeData.positions.set(key, newIndex);
     };
 
@@ -432,14 +488,16 @@ export default function GameWorld({
           if (swingCooldownRef.current <= 0 && !pickaxeSwingRef.current.swinging) {
             pickaxeSwingRef.current.swinging = true;
             pickaxeSwingRef.current.time = 0;
-            swingCooldownRef.current = 0.25;
+            swingCooldownRef.current = 0.5; // Slower mining - 0.5 seconds between hits
             
-            hitBlock.block.health -= 1;
+            // Reduce damage per hit for slower mining
+            hitBlock.block.health -= 0.5;
             const blockTypeData = BLOCK_TYPES[hitBlock.block.type];
             onBreakProgress(hitBlock.block.maxHealth - hitBlock.block.health, hitBlock.block.maxHealth, blockTypeData.name);
             
             if (hitBlock.block.health <= 0) {
               removeBlock(hitBlock.x, hitBlock.y, hitBlock.z);
+              revealNeighbors(hitBlock.x, hitBlock.y, hitBlock.z);
               onBlockMined(hitBlock.block.type, hitBlock.x, hitBlock.y, hitBlock.z);
               onBreakProgress(0, 1, '');
             }
