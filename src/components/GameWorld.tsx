@@ -11,14 +11,15 @@ interface GameWorldProps {
   hotbar: (string | null)[];
   onPlaceBlock: (x: number, y: number, z: number) => void;
   onCrystalPickup: (crystalId: number) => void;
-  droppedCrystals: { id: number; x: number; y: number; z: number }[];
+  onCrystalHit: (crystalId: number, hitCount: number) => void;
+  droppedCrystals: { id: number; x: number; y: number; z: number; baseY: number; hitCount: number }[];
   onPortalActivated: () => void;
   hasPortalKey: boolean;
 }
 
 export default function GameWorld({
   onCrystalFound, playerPosition, availableCrystals, onBlockMined,
-  selectedSlot, hotbar, onPlaceBlock, onCrystalPickup, droppedCrystals, onPortalActivated, hasPortalKey
+  selectedSlot, hotbar, onPlaceBlock, onCrystalPickup, onCrystalHit, droppedCrystals, onPortalActivated, hasPortalKey
 }: GameWorldProps) {
   const mountRef = useRef<HTMLDivElement>(null);
   const keysRef = useRef<{ [key: string]: boolean }>({});
@@ -41,6 +42,7 @@ export default function GameWorld({
   const selectedSlotRef = useRef(selectedSlot);
   const onPlaceBlockRef = useRef(onPlaceBlock);
   const onCrystalPickupRef = useRef(onCrystalPickup);
+  const onCrystalHitRef = useRef(onCrystalHit);
   const droppedCrystalsRef = useRef(droppedCrystals);
   const crystalMeshesRef = useRef<Map<number, THREE.Group>>(new Map());
   const placeCooldownRef = useRef(0);
@@ -54,6 +56,7 @@ export default function GameWorld({
   useEffect(() => { selectedSlotRef.current = selectedSlot; }, [selectedSlot]);
   useEffect(() => { onPlaceBlockRef.current = onPlaceBlock; }, [onPlaceBlock]);
   useEffect(() => { onCrystalPickupRef.current = onCrystalPickup; }, [onCrystalPickup]);
+  useEffect(() => { onCrystalHitRef.current = onCrystalHit; }, [onCrystalHit]);
   useEffect(() => { droppedCrystalsRef.current = droppedCrystals; }, [droppedCrystals]);
   useEffect(() => { hasPortalKeyRef.current = hasPortalKey; }, [hasPortalKey]);
   useEffect(() => { onPortalActivatedRef.current = onPortalActivated; }, [onPortalActivated]);
@@ -641,9 +644,25 @@ export default function GameWorld({
         const maxDist = 5;
         const step = 0.2;
         let hitBlock = null;
+        let hitCrystal = null;
         
+        // Check for crystal hit first
         for (let d = 0; d < maxDist; d += step) {
           const point = ray.at(d, new THREE.Vector3());
+          
+          // Check if we hit a crystal
+          for (const crystal of droppedCrystalsRef.current) {
+            const crystalPos = new THREE.Vector3(crystal.x + 0.5, crystal.y + 0.8, crystal.z + 0.5);
+            const dist = point.distanceTo(crystalPos);
+            if (dist < 0.8) {
+              hitCrystal = crystal;
+              break;
+            }
+          }
+          
+          if (hitCrystal) break;
+          
+          // Check for block
           const bx = Math.floor(point.x);
           const by = Math.floor(point.y);
           const bz = Math.floor(point.z);
@@ -657,6 +676,24 @@ export default function GameWorld({
           }
         }
         
+        // Handle crystal hit
+        if (hitCrystal && swingCooldownRef.current <= 0 && !pickaxeSwingRef.current.swinging) {
+          const selectedItem = hotbarRef.current[selectedSlotRef.current];
+          const canMine = !selectedItem || 
+                         selectedItem === 'stick' || 
+                         selectedItem?.includes('pickaxe');
+          
+          if (canMine) {
+            pickaxeSwingRef.current.swinging = true;
+            pickaxeSwingRef.current.time = 0;
+            swingCooldownRef.current = 0.8;
+            
+            const newHitCount = hitCrystal.hitCount + 1;
+            onCrystalHitRef.current(hitCrystal.id, newHitCount);
+          }
+        }
+        
+        // Handle block mining
         if (hitBlock && !BLOCK_TYPES[hitBlock.block.type]?.unbreakable) {
           if (swingCooldownRef.current <= 0 && !pickaxeSwingRef.current.swinging) {
             // Check if equipped item can mine (hand, pickaxe, or stick)
@@ -768,15 +805,49 @@ export default function GameWorld({
       if (placeCooldownRef.current > 0) placeCooldownRef.current -= 0.016;
       if (swingCooldownRef.current > 0) swingCooldownRef.current -= 0.016;
 
-      // Crystal pickup
+      // Crystal physics - falling if block below is removed
       droppedCrystalsRef.current.forEach(crystal => {
-        const dist = camera.position.distanceTo(new THREE.Vector3(crystal.x + 0.5, crystal.y + 0.8, crystal.z + 0.5));
-        if (dist < 2) onCrystalPickupRef.current(crystal.id);
+        const crystalMesh = crystalMeshesRef.current.get(crystal.id);
+        if (!crystalMesh) return;
+
+        // Check if there's a block below the crystal
+        const blockBelow = worldData[Math.floor(crystal.x)]?.[Math.floor(crystal.z)]?.[Math.floor(crystal.y) - 1];
+        
+        if (!blockBelow && crystalMesh.position.y > crystal.y - 2) {
+          // Fall down
+          crystalMesh.position.y -= 0.05;
+        } else if (blockBelow) {
+          // Reset to base position
+          crystalMesh.position.y = crystal.baseY + 0.8;
+        }
       });
 
-      // Animate crystals
-      crystalMeshesRef.current.forEach((group) => {
+      // Animate crystals - floating and glowing based on hit count
+      crystalMeshesRef.current.forEach((group, id) => {
+        const crystal = droppedCrystalsRef.current.find(c => c.id === id);
+        if (!crystal) return;
+
+        // Floating animation
         group.rotation.y += 0.02;
+        group.position.y = crystal.y + 0.8 + Math.sin(time * 2 + id) * 0.1;
+
+        // Increase glow based on hit count
+        const glowIntensity = 0.6 + (crystal.hitCount * 0.4); // 0.6, 1.0, 1.4, 1.8
+        const glowMesh = group.children[1] as THREE.Mesh;
+        if (glowMesh && glowMesh.material) {
+          (glowMesh.material as THREE.MeshBasicMaterial).opacity = 0.2 + (crystal.hitCount * 0.15);
+        }
+        
+        const light = group.children[2] as THREE.PointLight;
+        if (light) {
+          light.intensity = glowIntensity;
+        }
+
+        // Pulse effect when hit
+        if (crystal.hitCount > 0) {
+          const pulseScale = 1 + Math.sin(time * 8) * 0.1 * crystal.hitCount;
+          group.scale.setScalar(pulseScale);
+        }
       });
 
       // Update particles

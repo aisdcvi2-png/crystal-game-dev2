@@ -6,7 +6,14 @@ import { BLOCK_TYPES, ITEM_TYPES, CRAFT_RECIPES, TOOL_DURABILITY } from './data/
 import ItemIcon from './components/ItemIcon';
 
 type GameState = 'start' | 'playing' | 'question' | 'win' | 'victory';
-interface DroppedCrystal { id: number; x: number; y: number; z: number; }
+interface DroppedCrystal { 
+  id: number; 
+  x: number; 
+  y: number; 
+  z: number;
+  baseY: number; // Original Y position
+  hitCount: number; // Number of hits (0-3)
+}
 
 // ============ QUESTION MODAL ============
 function QuestionModal({ question, onAnswer, answeredIds }: { question: Question; onAnswer: (correct: boolean) => void; answeredIds: number[] }) {
@@ -365,7 +372,14 @@ function App() {
         cp.id === crystalId ? { ...cp, collected: true } : cp
       ));
       setAvailableCrystals(prev => prev.slice(1));
-      setDroppedCrystals(prev => [...prev, { id: crystalId, x: nearbyCrystal.x, y: nearbyCrystal.y + 1, z: nearbyCrystal.z }]);
+      setDroppedCrystals(prev => [...prev, { 
+        id: crystalId, 
+        x: nearbyCrystal.x, 
+        y: nearbyCrystal.y + 1, 
+        z: nearbyCrystal.z,
+        baseY: nearbyCrystal.y + 1,
+        hitCount: 0
+      }]);
       setCrystalNotification('💎 Откопан кристалл! Подойди чтобы подобрать!');
       setTimeout(() => setCrystalNotification(null), 3000);
     }
@@ -388,6 +402,19 @@ function App() {
     setTimeout(() => setCrystalNotification(null), 2000);
     if (document.pointerLockElement) document.exitPointerLock();
   }, []);
+
+  const handleCrystalHit = useCallback((crystalId: number, hitCount: number) => {
+    setDroppedCrystals(prev => prev.map(c => 
+      c.id === crystalId ? { ...c, hitCount } : c
+    ));
+    
+    if (hitCount >= 3) {
+      // Crystal is ready to be collected
+      setTimeout(() => {
+        handleCrystalPickup(crystalId);
+      }, 300);
+    }
+  }, [handleCrystalPickup]);
 
   const handleAnswerNow = useCallback(() => {
     setShowCrystalChoice(false);
@@ -781,6 +808,7 @@ function App() {
             hotbar={hotbar}
             onPlaceBlock={handlePlaceBlock}
             onCrystalPickup={handleCrystalPickup}
+            onCrystalHit={handleCrystalHit}
             droppedCrystals={droppedCrystals}
             onPortalActivated={handlePortalActivated}
             hasPortalKey={countItem('portal_key') > 0}
