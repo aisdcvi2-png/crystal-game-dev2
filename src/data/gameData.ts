@@ -101,9 +101,50 @@ export interface WorldBlock {
   maxHealth: number;
 }
 
+// Improved noise functions for smoother terrain
+function hash(x: number, z: number, seed: number): number {
+  let h = seed + x * 374761393 + z * 668265263;
+  h = (h ^ (h >> 13)) * 1274126177;
+  h = h ^ (h >> 16);
+  return (h & 0x7fffffff) / 0x7fffffff;
+}
+
+function smoothNoise(x: number, z: number, seed: number): number {
+  const ix = Math.floor(x);
+  const iz = Math.floor(z);
+  const fx = x - ix;
+  const fz = z - iz;
+  
+  // Smooth interpolation
+  const ux = fx * fx * (3 - 2 * fx);
+  const uz = fz * fz * (3 - 2 * fz);
+  
+  const a = hash(ix, iz, seed);
+  const b = hash(ix + 1, iz, seed);
+  const c = hash(ix, iz + 1, seed);
+  const d = hash(ix + 1, iz + 1, seed);
+  
+  return a + (b - a) * ux + (c - a) * uz + (a - b - c + d) * ux * uz;
+}
+
+function fbm(x: number, z: number, seed: number, octaves: number = 4): number {
+  let value = 0;
+  let amplitude = 1;
+  let frequency = 1;
+  let maxValue = 0;
+  
+  for (let i = 0; i < octaves; i++) {
+    value += smoothNoise(x * frequency, z * frequency, seed + i * 100) * amplitude;
+    maxValue += amplitude;
+    amplitude *= 0.5;
+    frequency *= 2;
+  }
+  
+  return value / maxValue;
+}
+
 function noise(x: number, z: number, seed: number): number {
-  const n = Math.sin(x * 12.9898 + z * 78.233 + seed) * 43758.5453;
-  return n - Math.floor(n);
+  return fbm(x, z, seed, 3);
 }
 
 export function generateWorld(seed?: number): WorldBlock[][][] {
@@ -115,9 +156,10 @@ export function generateWorld(seed?: number): WorldBlock[][][] {
     for (let z = 0; z < WORLD_SIZE; z++) {
       world[x][z] = [];
       
-      const n1 = noise(x * 0.05, z * 0.05, worldSeed);
-      const n2 = noise(x * 0.1, z * 0.1, worldSeed + 100);
-      const height = Math.floor(3 + n1 * 3 + n2 * 1.5);
+      // Smoother terrain with multiple noise layers
+      const baseHeight = fbm(x * 0.03, z * 0.03, worldSeed, 4);
+      const detail = fbm(x * 0.08, z * 0.08, worldSeed + 100, 3);
+      const height = Math.floor(3 + baseHeight * 4 + detail * 1.5);
 
       for (let y = 0; y < WORLD_HEIGHT; y++) {
         let type = '';
@@ -151,10 +193,11 @@ export function generateWorld(seed?: number): WorldBlock[][][] {
     }
   }
 
-  // Add trees
-  for (let i = 0; i < 20; i++) {
-    const tx = Math.floor(Math.random() * (WORLD_SIZE - 4)) + 2;
-    const tz = Math.floor(Math.random() * (WORLD_SIZE - 4)) + 2;
+  // Add trees with better generation
+  const treeCount = 40;
+  for (let i = 0; i < treeCount; i++) {
+    const tx = Math.floor(Math.random() * (WORLD_SIZE - 6)) + 3;
+    const tz = Math.floor(Math.random() * (WORLD_SIZE - 6)) + 3;
     
     let surfaceY = -1;
     for (let y = WORLD_HEIGHT - 1; y >= 0; y--) {
@@ -164,20 +207,31 @@ export function generateWorld(seed?: number): WorldBlock[][][] {
       }
     }
 
-    if (surfaceY >= 0 && surfaceY + 5 < WORLD_HEIGHT) {
+    if (surfaceY >= 0 && surfaceY + 7 < WORLD_HEIGHT) {
+      const treeHeight = 4 + Math.floor(Math.random() * 2);
+      
       // Trunk
-      for (let h = 1; h <= 4; h++) {
+      for (let h = 1; h <= treeHeight; h++) {
         world[tx][tz][surfaceY + h] = { type: 'oak_log', health: 3, maxHealth: 3 };
       }
-      // Leaves
-      for (let lx = -2; lx <= 2; lx++) {
-        for (let lz = -2; lz <= 2; lz++) {
-          for (let ly = 3; ly <= 5; ly++) {
+      
+      // Leaves - more natural shape
+      const leafStart = treeHeight - 2;
+      const leafEnd = treeHeight + 2;
+      
+      for (let ly = leafStart; ly <= leafEnd; ly++) {
+        const radius = ly === leafEnd ? 1 : (ly === leafStart ? 2 : 2);
+        for (let lx = -radius; lx <= radius; lx++) {
+          for (let lz = -radius; lz <= radius; lz++) {
             const nx = tx + lx;
             const nz = tz + lz;
+            
+            // Skip corners for rounder shape
+            if (Math.abs(lx) === radius && Math.abs(lz) === radius && Math.random() > 0.5) continue;
+            
             if (nx >= 0 && nx < WORLD_SIZE && nz >= 0 && nz < WORLD_SIZE) {
-              if (Math.abs(lx) + Math.abs(lz) < 4 && !world[nx][nz][surfaceY + ly]) {
-                if (!(lx === 0 && lz === 0 && ly <= 4)) {
+              if (!world[nx][nz][surfaceY + ly]) {
+                if (!(lx === 0 && lz === 0 && ly <= treeHeight)) {
                   world[nx][nz][surfaceY + ly] = { type: 'oak_leaves', health: 1, maxHealth: 1 };
                 }
               }

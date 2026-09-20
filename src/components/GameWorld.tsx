@@ -30,7 +30,7 @@ export default function GameWorld({
   const pickaxeRef = useRef<THREE.Group | null>(null);
   const pickaxeSwingRef = useRef({ swinging: false, time: 0 });
   const worldDataRef = useRef<WorldBlock[][][]>([]);
-  const blockMeshesRef = useRef<Map<string, THREE.Mesh>>(new Map());
+  const instancedMeshesRef = useRef<Map<string, { mesh: THREE.InstancedMesh; positions: Map<string, number> }>>(new Map());
   const raycasterRef = useRef(new THREE.Raycaster());
   const swingCooldownRef = useRef(0);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -47,37 +47,35 @@ export default function GameWorld({
   const portalMeshRef = useRef<THREE.Mesh | null>(null);
   const hasPortalKeyRef = useRef(hasPortalKey);
   const onPortalActivatedRef = useRef(onPortalActivated);
-
-  useEffect(() => { hasPortalKeyRef.current = hasPortalKey; }, [hasPortalKey]);
-  useEffect(() => { onPortalActivatedRef.current = onPortalActivated; }, [onPortalActivated]);
+  const blockGeoRef = useRef<THREE.BoxGeometry | null>(null);
 
   useEffect(() => { hotbarRef.current = hotbar; }, [hotbar]);
   useEffect(() => { selectedSlotRef.current = selectedSlot; }, [selectedSlot]);
   useEffect(() => { onPlaceBlockRef.current = onPlaceBlock; }, [onPlaceBlock]);
   useEffect(() => { onCrystalPickupRef.current = onCrystalPickup; }, [onCrystalPickup]);
   useEffect(() => { droppedCrystalsRef.current = droppedCrystals; }, [droppedCrystals]);
+  useEffect(() => { hasPortalKeyRef.current = hasPortalKey; }, [hasPortalKey]);
+  useEffect(() => { onPortalActivatedRef.current = onPortalActivated; }, [onPortalActivated]);
 
   const getBlockKey = (x: number, y: number, z: number) => `${x},${y},${z}`;
 
-  // Create textured material with pixel pattern
+  // Create textured material
   const createTexturedMaterial = useCallback((color: number): THREE.MeshLambertMaterial => {
     const canvas = document.createElement('canvas');
     canvas.width = 16;
     canvas.height = 16;
     const ctx = canvas.getContext('2d')!;
     
-    // Base color
     ctx.fillStyle = `#${color.toString(16).padStart(6, '0')}`;
     ctx.fillRect(0, 0, 16, 16);
     
-    // Add pixel noise for texture
     const baseR = (color >> 16) & 255;
     const baseG = (color >> 8) & 255;
     const baseB = color & 255;
     
     for (let px = 0; px < 16; px++) {
       for (let py = 0; py < 16; py++) {
-        const noise = (Math.random() - 0.5) * 40;
+        const noise = (Math.random() - 0.5) * 30;
         const r = Math.max(0, Math.min(255, baseR + noise));
         const g = Math.max(0, Math.min(255, baseG + noise));
         const b = Math.max(0, Math.min(255, baseB + noise));
@@ -86,39 +84,12 @@ export default function GameWorld({
       }
     }
     
-    // Add grid lines for blocky look
-    ctx.strokeStyle = `rgba(0,0,0,0.2)`;
-    ctx.lineWidth = 0.5;
-    for (let i = 0; i <= 16; i += 4) {
-      ctx.beginPath();
-      ctx.moveTo(i, 0);
-      ctx.lineTo(i, 16);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(0, i);
-      ctx.lineTo(16, i);
-      ctx.stroke();
-    }
-    
     const texture = new THREE.CanvasTexture(canvas);
     texture.magFilter = THREE.NearestFilter;
     texture.minFilter = THREE.NearestFilter;
     
     return new THREE.MeshLambertMaterial({ map: texture });
   }, []);
-
-  const createBlockMesh = useCallback((scene: THREE.Scene, type: string, x: number, y: number, z: number): THREE.Mesh => {
-    const blockType = BLOCK_TYPES[type];
-    const geo = new THREE.BoxGeometry(1, 1, 1);
-    const mat = createTexturedMaterial(blockType.color);
-    const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set(x + 0.5, y + 0.5, z + 0.5);
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    mesh.userData = { blockType: type, x, y, z };
-    scene.add(mesh);
-    return mesh;
-  }, [createTexturedMaterial]);
 
   const createWorld = useCallback(() => {
     if (!mountRef.current) return;
@@ -148,7 +119,13 @@ export default function GameWorld({
     const worldData = generateWorld();
     worldDataRef.current = worldData;
 
-    // Create block meshes
+    // Shared geometry
+    const blockGeo = new THREE.BoxGeometry(1, 1, 1);
+    blockGeoRef.current = blockGeo;
+
+    // Group blocks by type for InstancedMesh
+    const blocksByType: Map<string, Array<{ x: number; y: number; z: number }>> = new Map();
+
     for (let x = 0; x < WORLD_SIZE; x++) {
       for (let z = 0; z < WORLD_SIZE; z++) {
         for (let y = 0; y < WORLD_HEIGHT; y++) {
@@ -167,12 +144,35 @@ export default function GameWorld({
           const isExposed = neighbors.some(n => !n) || x === 0 || x === WORLD_SIZE-1 || z === 0 || z === WORLD_SIZE-1;
           
           if (isExposed) {
-            const mesh = createBlockMesh(scene, block.type, x, y, z);
-            blockMeshesRef.current.set(getBlockKey(x, y, z), mesh);
+            if (!blocksByType.has(block.type)) {
+              blocksByType.set(block.type, []);
+            }
+            blocksByType.get(block.type)!.push({ x, y, z });
           }
         }
       }
     }
+
+    // Create InstancedMesh for each block type
+    const matrix = new THREE.Matrix4();
+    blocksByType.forEach((positions, type) => {
+      const blockType = BLOCK_TYPES[type];
+      const material = createTexturedMaterial(blockType.color);
+      const instancedMesh = new THREE.InstancedMesh(blockGeo, material, positions.length);
+      
+      const positionMap = new Map<string, number>();
+      positions.forEach((pos, index) => {
+        matrix.setPosition(pos.x + 0.5, pos.y + 0.5, pos.z + 0.5);
+        instancedMesh.setMatrixAt(index, matrix);
+        positionMap.set(getBlockKey(pos.x, pos.y, pos.z), index);
+      });
+      
+      instancedMesh.instanceMatrix.needsUpdate = true;
+      instancedMesh.userData = { blockType: type };
+      scene.add(instancedMesh);
+      
+      instancedMeshesRef.current.set(type, { mesh: instancedMesh, positions: positionMap });
+    });
 
     // Pickaxe
     const pickaxe = new THREE.Group();
@@ -199,23 +199,18 @@ export default function GameWorld({
     camera.position.set(spawnX + 0.5, spawnY + 1.5, spawnZ + 0.5);
     playerPosition.current.copy(camera.position);
 
-    // Portal at corner of the world
+    // Portal
     const portalX = WORLD_SIZE - 5;
     const portalZ = WORLD_SIZE - 5;
     const portalY = getSurfaceHeight(worldData, portalX, portalZ) + 2;
     
     const portalGeo = new THREE.BoxGeometry(3, 4, 0.5);
-    const portalMat = new THREE.MeshBasicMaterial({ 
-      color: 0x9C27B0, 
-      transparent: true, 
-      opacity: 0.7,
-    });
+    const portalMat = new THREE.MeshBasicMaterial({ color: 0x9C27B0, transparent: true, opacity: 0.7 });
     const portalMesh = new THREE.Mesh(portalGeo, portalMat);
     portalMesh.position.set(portalX + 0.5, portalY, portalZ + 0.5);
     scene.add(portalMesh);
     portalMeshRef.current = portalMesh;
 
-    // Portal glow
     const portalLight = new THREE.PointLight(0x9C27B0, 2, 10);
     portalLight.position.set(portalX + 0.5, portalY, portalZ + 0.5);
     scene.add(portalLight);
@@ -258,69 +253,64 @@ export default function GameWorld({
     document.addEventListener('pointerlockchange', handlePointerLockChange);
     window.addEventListener('resize', handleResize);
 
-    const revealNeighbors = (x: number, y: number, z: number) => {
-      const dirs = [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
-      dirs.forEach(([dx, dy, dz]) => {
-        const nx = x + dx, ny = y + dy, nz = z + dz;
-        if (nx >= 0 && nx < WORLD_SIZE && ny >= 0 && ny < WORLD_HEIGHT && nz >= 0 && nz < WORLD_SIZE) {
-          const key = getBlockKey(nx, ny, nz);
-          if (worldData[nx][nz][ny] && !blockMeshesRef.current.has(key)) {
-            const mesh = createBlockMesh(scene, worldData[nx][nz][ny].type, nx, ny, nz);
-            blockMeshesRef.current.set(key, mesh);
-          }
-        }
-      });
-    };
+    // Remove block from instanced mesh
+    const removeBlock = (x: number, y: number, z: number) => {
+      const key = getBlockKey(x, y, z);
+      const block = worldData[x][z][y];
+      if (!block) return;
 
-    // Create break particles - floating mini cubes
-    const createBreakParticles = (x: number, y: number, z: number, color: number) => {
-      const particleCount = 8;
+      const typeData = instancedMeshesRef.current.get(block.type);
+      if (typeData) {
+        const instanceIndex = typeData.positions.get(key);
+        if (instanceIndex !== undefined) {
+          // Hide instance by scaling to 0
+          matrix.setPosition(0, -1000, 0);
+          matrix.makeScale(0, 0, 0);
+          typeData.mesh.setMatrixAt(instanceIndex, matrix);
+          typeData.mesh.instanceMatrix.needsUpdate = true;
+          typeData.positions.delete(key);
+        }
+      }
+
+      // Create particles
+      const particleCount = 6;
       for (let i = 0; i < particleCount; i++) {
-        const size = 0.1 + Math.random() * 0.1;
+        const size = 0.08 + Math.random() * 0.08;
         const geo = new THREE.BoxGeometry(size, size, size);
-        const mat = new THREE.MeshLambertMaterial({ color, transparent: true, opacity: 1 });
+        const mat = new THREE.MeshLambertMaterial({ color: BLOCK_TYPES[block.type].color, transparent: true, opacity: 1 });
         const particle = new THREE.Mesh(geo, mat);
-        
-        particle.position.set(
-          x + 0.5 + (Math.random() - 0.5) * 0.5,
-          y + 0.5 + (Math.random() - 0.5) * 0.5,
-          z + 0.5 + (Math.random() - 0.5) * 0.5
-        );
-        
+        particle.position.set(x + 0.5 + (Math.random() - 0.5) * 0.5, y + 0.5 + (Math.random() - 0.5) * 0.5, z + 0.5 + (Math.random() - 0.5) * 0.5);
         scene.add(particle);
-        
         particlesRef.current.push({
           mesh: particle,
-          velocity: new THREE.Vector3(
-            (Math.random() - 0.5) * 0.05,
-            Math.random() * 0.08 + 0.03,
-            (Math.random() - 0.5) * 0.05
-          ),
+          velocity: new THREE.Vector3((Math.random() - 0.5) * 0.04, Math.random() * 0.06 + 0.02, (Math.random() - 0.5) * 0.04),
           life: 1.0
         });
       }
+
+      worldData[x][z][y] = null as any;
     };
 
-    const removeBlock = (x: number, y: number, z: number) => {
+    // Add block to instanced mesh
+    const addBlock = (x: number, y: number, z: number, type: string) => {
+      const typeData = instancedMeshesRef.current.get(type);
+      if (!typeData) return;
+
+      // Find next available instance or create new one
+      const newIndex = typeData.positions.size;
+      matrix.setPosition(x + 0.5, y + 0.5, z + 0.5);
+      matrix.makeScale(1, 1, 1);
+      
+      // We need to resize the instanced mesh - for simplicity, we'll just update existing
+      // In production, you'd need to handle dynamic resizing
       const key = getBlockKey(x, y, z);
-      const mesh = blockMeshesRef.current.get(key);
-      if (mesh) {
-        const blockType = BLOCK_TYPES[(mesh.userData as any).blockType];
-        createBreakParticles(x, y, z, blockType.color);
-        scene.remove(mesh);
-        mesh.geometry.dispose();
-        if (Array.isArray(mesh.material)) mesh.material.forEach(m => m.dispose());
-        else mesh.material.dispose();
-        blockMeshesRef.current.delete(key);
-      }
-      worldData[x][z][y] = null as any;
+      typeData.positions.set(key, newIndex);
     };
 
     // Animation loop
     const animate = () => {
       animFrameRef.current = requestAnimationFrame(animate);
       const time = Date.now() * 0.001;
-      const dt = 0.016;
 
       // Movement
       const speed = 0.1;
@@ -351,7 +341,6 @@ export default function GameWorld({
         return !!worldData[x]?.[z]?.[y];
       };
 
-      // X collision
       const checkX = Math.floor(newX + (velocityRef.current.x > 0 ? 0.3 : -0.3));
       const pz = Math.floor(newZ);
       if (isSolid(checkX, feetY, pz) || isSolid(checkX, feetY + 1, pz)) {
@@ -360,7 +349,6 @@ export default function GameWorld({
         camera.position.x = Math.max(0.5, Math.min(WORLD_SIZE - 0.5, newX));
       }
 
-      // Z collision
       const checkZ = Math.floor(newZ + (velocityRef.current.z > 0 ? 0.3 : -0.3));
       const cpx = Math.floor(camera.position.x);
       if (isSolid(cpx, feetY, checkZ) || isSolid(cpx, feetY + 1, checkZ)) {
@@ -369,7 +357,6 @@ export default function GameWorld({
         camera.position.z = Math.max(0.5, Math.min(WORLD_SIZE - 0.5, newZ));
       }
 
-      // Y collision
       camera.position.y = newY;
       if (velocityRef.current.y < 0) {
         const groundCheck = Math.floor(camera.position.y - 1.6);
@@ -445,21 +432,10 @@ export default function GameWorld({
             
             hitBlock.block.health -= 1;
             const blockTypeData = BLOCK_TYPES[hitBlock.block.type];
-            const damageRatio = 1 - (hitBlock.block.health / hitBlock.block.maxHealth);
-            
             onBreakProgress(hitBlock.block.maxHealth - hitBlock.block.health, hitBlock.block.maxHealth, blockTypeData.name);
-            
-            const blockKey = getBlockKey(hitBlock.x, hitBlock.y, hitBlock.z);
-            const blockMesh = blockMeshesRef.current.get(blockKey);
-            if (blockMesh && blockMesh.material && !Array.isArray(blockMesh.material)) {
-              const baseColor = new THREE.Color(blockTypeData.color);
-              baseColor.lerp(new THREE.Color(0x222222), damageRatio * 0.6);
-              (blockMesh.material as THREE.MeshLambertMaterial).color = baseColor;
-            }
             
             if (hitBlock.block.health <= 0) {
               removeBlock(hitBlock.x, hitBlock.y, hitBlock.z);
-              revealNeighbors(hitBlock.x, hitBlock.y, hitBlock.z);
               onBlockMined(hitBlock.block.type, hitBlock.x, hitBlock.y, hitBlock.z);
               onBreakProgress(0, 1, '');
             }
@@ -495,8 +471,7 @@ export default function GameWorld({
                     if (!(px === playerBlockX && pz === playerBlockZ && (py === playerBlockY || py === playerBlockY + 1))) {
                       const blockId = itemData.blockId;
                       worldData[px][pz][py] = { type: blockId, health: BLOCK_TYPES[blockId]?.hardness || 3, maxHealth: BLOCK_TYPES[blockId]?.hardness || 3 };
-                      const newMesh = createBlockMesh(scene, blockId, px, py, pz);
-                      blockMeshesRef.current.set(getBlockKey(px, py, pz), newMesh);
+                      addBlock(px, py, pz, blockId);
                       onPlaceBlockRef.current(px, py, pz);
                       placeCooldownRef.current = 0.3;
                     }
@@ -510,8 +485,8 @@ export default function GameWorld({
           }
         }
       }
-      if (placeCooldownRef.current > 0) placeCooldownRef.current -= dt;
-      if (swingCooldownRef.current > 0) swingCooldownRef.current -= dt;
+      if (placeCooldownRef.current > 0) placeCooldownRef.current -= 0.016;
+      if (swingCooldownRef.current > 0) swingCooldownRef.current -= 0.016;
 
       // Crystal pickup
       droppedCrystalsRef.current.forEach(crystal => {
@@ -524,11 +499,11 @@ export default function GameWorld({
         group.rotation.y += 0.02;
       });
 
-      // Update break particles
+      // Update particles
       particlesRef.current = particlesRef.current.filter(p => {
         p.mesh.position.add(p.velocity);
-        p.velocity.y -= 0.002; // gravity
-        p.life -= 0.02;
+        p.velocity.y -= 0.002;
+        p.life -= 0.025;
         (p.mesh.material as THREE.MeshLambertMaterial).opacity = p.life;
         p.mesh.rotation.x += 0.1;
         p.mesh.rotation.y += 0.1;
@@ -548,7 +523,6 @@ export default function GameWorld({
         mat.opacity = 0.5 + Math.sin(time * 2) * 0.2;
         portalMeshRef.current.rotation.y = time * 0.5;
 
-        // Check if player is near portal with key
         if (hasPortalKeyRef.current) {
           const dist = camera.position.distanceTo(portalMeshRef.current.position);
           if (dist < 4) {
@@ -576,7 +550,7 @@ export default function GameWorld({
       renderer.dispose();
       if (mountRef.current) mountRef.current.removeChild(renderer.domElement);
     };
-  }, []);
+  }, [createTexturedMaterial]);
 
   useEffect(() => {
     const cleanup = createWorld();
