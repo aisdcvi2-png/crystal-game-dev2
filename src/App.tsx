@@ -330,6 +330,7 @@ function App() {
             notification={notification}
             crystalNotification={crystalNotification}
             hasPortalKey={hasPortalKey}
+            toolDurability={toolDurability}
           />
           {showInventory && (
             <Inventory

@@ -16,74 +16,74 @@ interface InventoryProps {
 export default function Inventory({ hotbar, inventory, setHotbar, setInventory, onCraft, onClose, countItem, toolDurability }: InventoryProps) {
   const [activeTab, setActiveTab] = useState<'inventory' | 'craft' | 'manual'>('inventory');
   const [craftCategory, setCraftCategory] = useState<'tools' | 'materials' | 'building' | 'special'>('tools');
-  const [selectedItem, setSelectedItem] = useState<{ item: string; from: 'hotbar' | 'inventory'; index: number } | null>(null);
+  const [dragItem, setDragItem] = useState<{ item: string; from: 'hotbar' | 'inventory'; index: number } | null>(null);
   const [hoveredItem, setHoveredItem] = useState<string | null>(null);
 
   const handleSlotClick = (item: string | null, index: number, from: 'hotbar' | 'inventory') => {
     if (!item) {
-      if (selectedItem) {
+      if (dragItem) {
         if (from === 'hotbar') {
           const newHotbar = [...hotbar];
-          newHotbar[index] = selectedItem.item;
+          newHotbar[index] = dragItem.item;
           setHotbar(newHotbar);
-          if (selectedItem.from === 'hotbar') {
-            newHotbar[selectedItem.index] = null;
+          if (dragItem.from === 'hotbar') {
+            newHotbar[dragItem.index] = null;
           } else {
             const newInventory = [...inventory];
-            newInventory[selectedItem.index] = null;
+            newInventory[dragItem.index] = null;
             setInventory(newInventory);
           }
         } else {
           const newInventory = [...inventory];
-          newInventory[index] = selectedItem.item;
+          newInventory[index] = dragItem.item;
           setInventory(newInventory);
-          if (selectedItem.from === 'hotbar') {
+          if (dragItem.from === 'hotbar') {
             const newHotbar = [...hotbar];
-            newHotbar[selectedItem.index] = null;
+            newHotbar[dragItem.index] = null;
             setHotbar(newHotbar);
           } else {
-            newInventory[selectedItem.index] = null;
+            newInventory[dragItem.index] = null;
           }
         }
-        setSelectedItem(null);
+        setDragItem(null);
       }
     } else {
-      if (selectedItem) {
-        if (selectedItem.from === 'hotbar' && from === 'hotbar') {
+      if (dragItem) {
+        if (dragItem.from === 'hotbar' && from === 'hotbar') {
           const newHotbar = [...hotbar];
-          newHotbar[selectedItem.index] = item;
-          newHotbar[index] = selectedItem.item;
+          newHotbar[dragItem.index] = item;
+          newHotbar[index] = dragItem.item;
           setHotbar(newHotbar);
-        } else if (selectedItem.from === 'inventory' && from === 'inventory') {
+        } else if (dragItem.from === 'inventory' && from === 'inventory') {
           const newInventory = [...inventory];
-          newInventory[selectedItem.index] = item;
-          newInventory[index] = selectedItem.item;
+          newInventory[dragItem.index] = item;
+          newInventory[index] = dragItem.item;
           setInventory(newInventory);
-        } else if (selectedItem.from === 'hotbar' && from === 'inventory') {
+        } else if (dragItem.from === 'hotbar' && from === 'inventory') {
           const newHotbar = [...hotbar];
-          newHotbar[selectedItem.index] = item;
+          newHotbar[dragItem.index] = item;
           setHotbar(newHotbar);
           const newInventory = [...inventory];
-          newInventory[index] = selectedItem.item;
+          newInventory[index] = dragItem.item;
           setInventory(newInventory);
         } else {
           const newInventory = [...inventory];
-          newInventory[selectedItem.index] = item;
+          newInventory[dragItem.index] = item;
           setInventory(newInventory);
           const newHotbar = [...hotbar];
-          newHotbar[index] = selectedItem.item;
+          newHotbar[index] = dragItem.item;
           setHotbar(newHotbar);
         }
-        setSelectedItem(null);
+        setDragItem(null);
       } else {
-        setSelectedItem({ item, from, index });
+        setDragItem({ item, from, index });
       }
     }
   };
 
   const renderSlot = (item: string | null, index: number, isHotbar: boolean = false) => {
     const itemData = item ? ITEM_TYPES[item] : null;
-    const isSelected = selectedItem && selectedItem.item === item && selectedItem.from === (isHotbar ? 'hotbar' : 'inventory') && selectedItem.index === index;
+    const isSelected = dragItem && dragItem.item === item && dragItem.from === (isHotbar ? 'hotbar' : 'inventory') && dragItem.index === index;
     const durability = item && toolDurability[item] !== undefined ? toolDurability[item] : null;
     const maxDurability = item && ITEM_TYPES[item]?.durability ? ITEM_TYPES[item].durability! : null;
     

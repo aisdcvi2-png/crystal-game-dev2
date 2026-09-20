@@ -15,11 +15,12 @@ interface HUDProps {
   notification: string | null;
   crystalNotification: string | null;
   hasPortalKey: boolean;
+  toolDurability: Record<string, number>;
 }
 
 export default function HUD({
   crystalsCollected, totalCrystals, questionsAnswered, correctAnswers,
-  currentSubject, onStartQuestion, breakProgress, hotbar, selectedSlot, notification, crystalNotification, hasPortalKey
+  currentSubject, onStartQuestion, breakProgress, hotbar, selectedSlot, notification, crystalNotification, hasPortalKey, toolDurability
 }: HUDProps) {
   const subject = subjects.find(s => s.name === currentSubject);
 
@@ -136,6 +137,9 @@ export default function HUD({
         <div className="flex gap-1 bg-gray-900/80 backdrop-blur-sm border border-gray-600/50 rounded-xl p-2">
           {hotbar.map((item, i) => {
             const itemData = item ? ITEM_TYPES[item] : null;
+            const durability = item && toolDurability[item] !== undefined ? toolDurability[item] : null;
+            const maxDurability = item && ITEM_TYPES[item]?.durability ? ITEM_TYPES[item].durability! : null;
+            
             return (
               <div
                 key={i}
@@ -155,10 +159,42 @@ export default function HUD({
                     {itemData.name.split(' ')[0]}
                   </div>
                 )}
+                {durability !== null && maxDurability !== null && (
+                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-700 rounded-b">
+                    <div 
+                      className={`h-full rounded-b ${
+                        durability / maxDurability > 0.5 ? 'bg-green-500' :
+                        durability / maxDurability > 0.25 ? 'bg-yellow-500' : 'bg-red-500'
+                      }`}
+                      style={{ width: `${(durability / maxDurability) * 100}%` }}
+                    />
+                  </div>
+                )}
               </div>
             );
           })}
         </div>
+        
+        {/* Current tool info */}
+        {hotbar[selectedSlot] && ITEM_TYPES[hotbar[selectedSlot]!]?.toolSpeed && (
+          <div className="mt-2 text-center">
+            <div className="bg-gray-900/80 backdrop-blur-sm border border-gray-600/50 rounded-lg px-3 py-1 inline-block">
+              <span className="text-amber-400 text-xs font-bold">
+                ⛏️ {ITEM_TYPES[hotbar[selectedSlot]!].name}
+              </span>
+              <span className="text-gray-400 text-xs ml-2">
+                Скорость: x{ITEM_TYPES[hotbar[selectedSlot]!].toolSpeed}
+              </span>
+            </div>
+          </div>
+        )}
+        {!hotbar[selectedSlot] && (
+          <div className="mt-2 text-center">
+            <div className="bg-gray-900/80 backdrop-blur-sm border border-gray-600/50 rounded-lg px-3 py-1 inline-block">
+              <span className="text-gray-400 text-xs">✋ Рука (Скорость: x1)</span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Controls hint */}

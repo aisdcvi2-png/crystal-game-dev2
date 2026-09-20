@@ -2,13 +2,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import * as THREE from 'three';
 import { BLOCK_TYPES, ITEM_TYPES, WORLD_SIZE, WORLD_HEIGHT, generateWorld, getSurfaceHeight, WorldData, WorldBlock, BiomeType, BIOMES } from '../data/gameData';
 
-interface NPC {
-  mesh: THREE.Group;
-  position: THREE.Vector3;
-  target: THREE.Vector3;
-  speed: number;
-  lastGreet: number;
-}
+// NPC removed for performance
 
 interface GameWorldProps {
   crystalsCollected: number;
@@ -56,7 +50,6 @@ export default function GameWorld({
   const droppedCrystalsRef = useRef(droppedCrystals);
   const crystalMeshesRef = useRef<Map<number, THREE.Group>>(new Map());
   const placeCooldownRef = useRef(0);
-  const npcsRef = useRef<NPC[]>([]);
   const audioContextRef = useRef<AudioContext | null>(null);
   const portalMeshRef = useRef<THREE.Mesh | null>(null);
   const hasPortalKeyRef = useRef(hasPortalKey);
@@ -136,64 +129,7 @@ export default function GameWorld({
     });
   }, []);
 
-  const createNPC = useCallback((scene: THREE.Scene, x: number, z: number): NPC => {
-    const group = new THREE.Group();
-    
-    // Head
-    const headGeo = new THREE.BoxGeometry(0.5, 0.5, 0.5);
-    const headMat = new THREE.MeshLambertMaterial({ color: 0xffdbac });
-    const head = new THREE.Mesh(headGeo, headMat);
-    head.position.y = 1.7;
-    group.add(head);
-
-    // Eyes
-    const eyeGeo = new THREE.BoxGeometry(0.08, 0.08, 0.08);
-    const eyeMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
-    const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
-    leftEye.position.set(-0.12, 1.75, 0.26);
-    group.add(leftEye);
-    const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
-    rightEye.position.set(0.12, 1.75, 0.26);
-    group.add(rightEye);
-
-    // Body
-    const bodyGeo = new THREE.BoxGeometry(0.5, 0.7, 0.3);
-    const bodyMat = new THREE.MeshLambertMaterial({ color: 0x4a90e2 });
-    const body = new THREE.Mesh(bodyGeo, bodyMat);
-    body.position.y = 1.1;
-    group.add(body);
-
-    // Arms
-    const armGeo = new THREE.BoxGeometry(0.2, 0.6, 0.2);
-    const armMat = new THREE.MeshLambertMaterial({ color: 0xffdbac });
-    const leftArm = new THREE.Mesh(armGeo, armMat);
-    leftArm.position.set(-0.35, 1.1, 0);
-    group.add(leftArm);
-    const rightArm = new THREE.Mesh(armGeo, armMat);
-    rightArm.position.set(0.35, 1.1, 0);
-    group.add(rightArm);
-
-    // Legs
-    const legGeo = new THREE.BoxGeometry(0.2, 0.6, 0.2);
-    const legMat = new THREE.MeshLambertMaterial({ color: 0x3d5a80 });
-    const leftLeg = new THREE.Mesh(legGeo, legMat);
-    leftLeg.position.set(-0.15, 0.4, 0);
-    group.add(leftLeg);
-    const rightLeg = new THREE.Mesh(legGeo, legMat);
-    rightLeg.position.set(0.15, 0.4, 0);
-    group.add(rightLeg);
-
-    group.position.set(x, 0, z);
-    scene.add(group);
-
-    return {
-      mesh: group,
-      position: new THREE.Vector3(x, 0, z),
-      target: new THREE.Vector3(x + (Math.random() - 0.5) * 10, 0, z + (Math.random() - 0.5) * 10),
-      speed: 0.02 + Math.random() * 0.02,
-      lastGreet: 0,
-    };
-  }, []);
+  // NPC creation removed for performance
 
   const createBlockMesh = useCallback((scene: THREE.Scene, type: string, x: number, y: number, z: number): THREE.Mesh => {
     const blockType = BLOCK_TYPES[type];
@@ -353,19 +289,7 @@ export default function GameWorld({
       scene.add(portalLight);
     }
 
-    // Spawn NPCs
-    const npcPositions = [
-      { x: 20, z: 20 }, { x: 40, z: 15 }, { x: 60, z: 40 },
-      { x: 25, z: 55 }, { x: 50, z: 60 }, { x: 15, z: 40 },
-    ];
-    npcPositions.forEach(pos => {
-      const surfaceY = getSurfaceHeight(worldData.blocks, pos.x, pos.z);
-      const npc = createNPC(scene, pos.x + 0.5, pos.z + 0.5);
-      npc.position.y = surfaceY + 1;
-      npc.mesh.position.y = surfaceY + 1;
-      npc.target.y = surfaceY + 1;
-      npcsRef.current.push(npc);
-    });
+    // NPCs removed for performance
 
     // Player spawn
     const spawnX = Math.floor(WORLD_SIZE / 2);
@@ -542,12 +466,11 @@ export default function GameWorld({
         }
       }
 
-      // Mining - optimized raycast
+      // Mining with tool system and visual cracks
       if (mouseRef.current.leftDown && mouseRef.current.locked) {
         raycasterRef.current.setFromCamera(new THREE.Vector2(0, 0), camera);
         raycasterRef.current.far = 5;
         
-        // Simple raycast - check blocks along ray
         const ray = raycasterRef.current.ray;
         const maxDist = 5;
         const step = 0.2;
@@ -575,15 +498,33 @@ export default function GameWorld({
             swingCooldownRef.current = 0.25;
             
             const selectedItem = hotbarRef.current[selectedSlotRef.current];
-            let toolSpeed = 1;
+            let toolSpeed = 1; // Hand speed
+            
+            // Tool speed based on equipped item
             if (selectedItem) {
               const itemData = ITEM_TYPES[selectedItem];
-              if (itemData?.toolSpeed) toolSpeed = itemData.toolSpeed;
+              if (itemData?.toolSpeed) {
+                toolSpeed = itemData.toolSpeed;
+              } else if (selectedItem === 'stick') {
+                toolSpeed = 1.5; // Stick is slightly better than hand
+              }
             }
             
             hitBlock.block.health -= toolSpeed;
             const blockTypeData = BLOCK_TYPES[hitBlock.block.type];
+            const damageRatio = 1 - (hitBlock.block.health / hitBlock.block.maxHealth);
+            
+            // Update progress bar
             onBreakProgress(hitBlock.block.maxHealth - hitBlock.block.health, hitBlock.block.maxHealth, blockTypeData.name);
+            
+            // Visual cracks on block - darken based on damage
+            const blockKey = getBlockKey(hitBlock.x, hitBlock.y, hitBlock.z);
+            const blockMesh = blockMeshesRef.current.get(blockKey);
+            if (blockMesh && blockMesh.material && !Array.isArray(blockMesh.material)) {
+              const baseColor = new THREE.Color(blockTypeData.color);
+              baseColor.lerp(new THREE.Color(0x222222), damageRatio * 0.6);
+              (blockMesh.material as THREE.MeshLambertMaterial).color = baseColor;
+            }
             
             if (hitBlock.block.health <= 0) {
               removeBlock(hitBlock.x, hitBlock.y, hitBlock.z);
@@ -668,43 +609,7 @@ export default function GameWorld({
         }
       }
 
-      // Optimized NPC movement
-      npcsRef.current.forEach(npc => {
-        const dx = npc.target.x - npc.position.x;
-        const dz = npc.target.z - npc.position.z;
-        const dist = Math.sqrt(dx * dx + dz * dz);
-        
-        if (dist < 1) {
-          // Pick new target
-          npc.target.x = Math.max(2, Math.min(WORLD_SIZE - 2, npc.position.x + (Math.random() - 0.5) * 15));
-          npc.target.z = Math.max(2, Math.min(WORLD_SIZE - 2, npc.position.z + (Math.random() - 0.5) * 15));
-        } else {
-          // Move towards target
-          const moveX = (dx / dist) * npc.speed;
-          const moveZ = (dz / dist) * npc.speed;
-          npc.position.x += moveX;
-          npc.position.z += moveZ;
-          
-          // Keep on surface
-          const bx = Math.floor(npc.position.x);
-          const bz = Math.floor(npc.position.z);
-          if (bx >= 0 && bx < WORLD_SIZE && bz >= 0 && bz < WORLD_SIZE) {
-            npc.position.y = getSurfaceHeight(worldData.blocks, bx, bz) + 1;
-          }
-          
-          npc.mesh.position.copy(npc.position);
-          npc.mesh.rotation.y = Math.atan2(dx, dz);
-        }
-
-        // Simple greeting check
-        const dxp = npc.position.x - camera.position.x;
-        const dzp = npc.position.z - camera.position.z;
-        const distToPlayer = Math.sqrt(dxp * dxp + dzp * dzp);
-        if (distToPlayer < 5 && time - npc.lastGreet > 5) {
-          npc.lastGreet = time;
-          playGreetSound();
-        }
-      });
+      // NPCs removed for performance
 
       // Particles disabled for performance
 
