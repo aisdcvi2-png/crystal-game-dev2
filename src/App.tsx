@@ -270,16 +270,27 @@ function App() {
       blockData.rareDrops.forEach(drop => {
         if (Math.random() < drop.chance) {
           if (drop.item === 'crystal' && availableCrystals.length > 0) {
-            const crystalId = availableCrystals[0];
-            setAvailableCrystals(prev => prev.slice(1));
-            setDroppedCrystals(prev => [...prev, { id: crystalId, x, y: y + 1, z }]);
-            setCrystalNotification('💎 Откопан кристалл! Подойди чтобы подобрать!');
-            setTimeout(() => setCrystalNotification(null), 3000);
+            // Check minimum distance from other crystals (at least 8 blocks)
+            const minDistance = 8;
+            const tooClose = droppedCrystals.some(c => {
+              const dx = c.x - x;
+              const dy = c.y - y;
+              const dz = c.z - z;
+              return Math.sqrt(dx * dx + dy * dy + dz * dz) < minDistance;
+            });
+            
+            if (!tooClose) {
+              const crystalId = availableCrystals[0];
+              setAvailableCrystals(prev => prev.slice(1));
+              setDroppedCrystals(prev => [...prev, { id: crystalId, x, y: y + 1, z }]);
+              setCrystalNotification('💎 Откопан кристалл! Подойди чтобы подобрать!');
+              setTimeout(() => setCrystalNotification(null), 3000);
+            }
           } else addItem(drop.item, drop.count);
         }
       });
     }
-  }, [availableCrystals, addItem, damageTool]);
+  }, [availableCrystals, addItem, damageTool, droppedCrystals]);
 
   const handleCrystalPickup = useCallback((crystalId: number) => {
     setDroppedCrystals(prev => prev.filter(c => c.id !== crystalId));
@@ -608,35 +619,141 @@ function App() {
                 {/* Crafting */}
                 <div>
                   <h3 className="text-amber-400 font-bold mb-2 text-sm">🔨 Крафт</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {CRAFT_RECIPES.map(recipe => {
-                      const craftable = recipe.ingredients.every(ing => countItem(ing.item) >= ing.count);
-                      return (
-                        <div key={recipe.id} className={`rounded-xl p-3 border-2 ${craftable ? 'border-green-500/50 bg-green-900/20 cursor-pointer hover:bg-green-900/30' : 'border-gray-600/30 bg-gray-800/30 opacity-60'}`} onClick={() => craftable && handleCraft(recipe.id)}>
-                          <div className="flex items-center gap-3">
-                            <ItemIcon itemId={recipe.result.item} size={40} />
-                            <div className="flex-1">
-                              <div className="text-white font-bold text-sm">{recipe.name}</div>
-                              <div className="text-gray-400 text-xs">{recipe.description}</div>
-                              {recipe.requiresQuestion && <div className="text-yellow-400 text-xs mt-1">⚠️ Нужен ответ на вопрос!</div>}
+                  
+                  {/* Materials */}
+                  <div className="mb-3">
+                    <h4 className="text-gray-300 font-bold mb-2 text-xs">📦 Материалы</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      {CRAFT_RECIPES.filter(r => r.category === 'materials').map(recipe => {
+                        const craftable = recipe.ingredients.every(ing => countItem(ing.item) >= ing.count);
+                        return (
+                          <div key={recipe.id} className={`rounded-lg p-2 border ${craftable ? 'border-green-500/50 bg-green-900/20 cursor-pointer hover:bg-green-900/30' : 'border-gray-600/30 bg-gray-800/30 opacity-60'}`} onClick={() => craftable && handleCraft(recipe.id)}>
+                            <div className="flex items-center gap-2">
+                              <ItemIcon itemId={recipe.result.item} size={32} />
+                              <div className="flex-1 min-w-0">
+                                <div className="text-white font-bold text-xs truncate">{recipe.name}</div>
+                                <div className="text-gray-400 text-[10px] truncate">{recipe.description}</div>
+                              </div>
+                              {craftable && <div className="text-green-400 text-xs font-bold">✓</div>}
                             </div>
-                            {craftable && <button className="bg-green-600 text-white px-3 py-1 rounded-lg text-sm font-bold">Создать</button>}
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {recipe.ingredients.map((ing, i) => {
+                                const hasEnough = countItem(ing.item) >= ing.count;
+                                return (
+                                  <div key={i} className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] ${hasEnough ? 'bg-green-800/30 text-green-300' : 'bg-red-800/30 text-red-300'}`}>
+                                    <ItemIcon itemId={ing.item} size={12} />
+                                    <span>{countItem(ing.item)}/{ing.count}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
                           </div>
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            {recipe.ingredients.map((ing, i) => {
-                              const hasEnough = countItem(ing.item) >= ing.count;
-                              return (
-                                <div key={i} className={`flex items-center gap-1 px-2 py-1 rounded text-xs ${hasEnough ? 'bg-green-800/30 text-green-300' : 'bg-red-800/30 text-red-300'}`}>
-                                  <ItemIcon itemId={ing.item} size={16} />
-                                  <span>{countItem(ing.item)}/{ing.count}</span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
+                  
+                  {/* Tools */}
+                  <div className="mb-3">
+                    <h4 className="text-gray-300 font-bold mb-2 text-xs">⛏️ Инструменты</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      {CRAFT_RECIPES.filter(r => r.category === 'tools').map(recipe => {
+                        const craftable = recipe.ingredients.every(ing => countItem(ing.item) >= ing.count);
+                        return (
+                          <div key={recipe.id} className={`rounded-lg p-2 border ${craftable ? 'border-green-500/50 bg-green-900/20 cursor-pointer hover:bg-green-900/30' : 'border-gray-600/30 bg-gray-800/30 opacity-60'}`} onClick={() => craftable && handleCraft(recipe.id)}>
+                            <div className="flex items-center gap-2">
+                              <ItemIcon itemId={recipe.result.item} size={32} />
+                              <div className="flex-1 min-w-0">
+                                <div className="text-white font-bold text-xs truncate">{recipe.name}</div>
+                                <div className="text-gray-400 text-[10px] truncate">{recipe.description}</div>
+                                {recipe.requiresQuestion && <div className="text-yellow-400 text-[10px]">⚠️ Вопрос</div>}
+                              </div>
+                              {craftable && <div className="text-green-400 text-xs font-bold">✓</div>}
+                            </div>
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {recipe.ingredients.map((ing, i) => {
+                                const hasEnough = countItem(ing.item) >= ing.count;
+                                return (
+                                  <div key={i} className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] ${hasEnough ? 'bg-green-800/30 text-green-300' : 'bg-red-800/30 text-red-300'}`}>
+                                    <ItemIcon itemId={ing.item} size={12} />
+                                    <span>{countItem(ing.item)}/{ing.count}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  
+                  {/* Building */}
+                  <div className="mb-3">
+                    <h4 className="text-gray-300 font-bold mb-2 text-xs">🏗️ Строительство</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      {CRAFT_RECIPES.filter(r => r.category === 'building').map(recipe => {
+                        const craftable = recipe.ingredients.every(ing => countItem(ing.item) >= ing.count);
+                        return (
+                          <div key={recipe.id} className={`rounded-lg p-2 border ${craftable ? 'border-green-500/50 bg-green-900/20 cursor-pointer hover:bg-green-900/30' : 'border-gray-600/30 bg-gray-800/30 opacity-60'}`} onClick={() => craftable && handleCraft(recipe.id)}>
+                            <div className="flex items-center gap-2">
+                              <ItemIcon itemId={recipe.result.item} size={32} />
+                              <div className="flex-1 min-w-0">
+                                <div className="text-white font-bold text-xs truncate">{recipe.name}</div>
+                                <div className="text-gray-400 text-[10px] truncate">{recipe.description}</div>
+                              </div>
+                              {craftable && <div className="text-green-400 text-xs font-bold">✓</div>}
+                            </div>
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {recipe.ingredients.map((ing, i) => {
+                                const hasEnough = countItem(ing.item) >= ing.count;
+                                return (
+                                  <div key={i} className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] ${hasEnough ? 'bg-green-800/30 text-green-300' : 'bg-red-800/30 text-red-300'}`}>
+                                    <ItemIcon itemId={ing.item} size={12} />
+                                    <span>{countItem(ing.item)}/{ing.count}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  
+                  {/* Special */}
+                  {CRAFT_RECIPES.filter(r => r.category === 'special').length > 0 && (
+                    <div>
+                      <h4 className="text-gray-300 font-bold mb-2 text-xs">✨ Особое</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        {CRAFT_RECIPES.filter(r => r.category === 'special').map(recipe => {
+                          const craftable = recipe.ingredients.every(ing => countItem(ing.item) >= ing.count);
+                          return (
+                            <div key={recipe.id} className={`rounded-lg p-2 border ${craftable ? 'border-purple-500/50 bg-purple-900/20 cursor-pointer hover:bg-purple-900/30' : 'border-gray-600/30 bg-gray-800/30 opacity-60'}`} onClick={() => craftable && handleCraft(recipe.id)}>
+                              <div className="flex items-center gap-2">
+                                <ItemIcon itemId={recipe.result.item} size={32} />
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-white font-bold text-xs truncate">{recipe.name}</div>
+                                  <div className="text-gray-400 text-[10px] truncate">{recipe.description}</div>
+                                </div>
+                                {craftable && <div className="text-purple-400 text-xs font-bold">✓</div>}
+                              </div>
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {recipe.ingredients.map((ing, i) => {
+                                  const hasEnough = countItem(ing.item) >= ing.count;
+                                  return (
+                                    <div key={i} className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] ${hasEnough ? 'bg-purple-800/30 text-purple-300' : 'bg-red-800/30 text-red-300'}`}>
+                                      <ItemIcon itemId={ing.item} size={12} />
+                                      <span>{countItem(ing.item)}/{ing.count}</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="mt-4 pt-3 border-t border-gray-700 text-center text-gray-500 text-xs">

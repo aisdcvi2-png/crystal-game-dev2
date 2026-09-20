@@ -53,6 +53,13 @@ export const BLOCK_TYPES: Record<string, BlockType> = {
   sand: { id: 'sand', name: 'Песок', color: 0xd4c475, hardness: 3, drops: [{ item: 'sand_block', count: 1, chance: 1 }] },
   oak_log: { id: 'oak_log', name: 'Дуб', color: 0x6B4226, hardness: 6, drops: [{ item: 'oak_log_item', count: 1, chance: 1 }] },
   oak_leaves: { id: 'oak_leaves', name: 'Листва', color: 0x2d7a2d, hardness: 2, rareDrops: [{ item: 'stick', count: 1, chance: 0.2 }] },
+  
+  // Utility blocks
+  torch: { id: 'torch', name: 'Факел', color: 0xFFA500, hardness: 1, drops: [{ item: 'torch', count: 1, chance: 1 }] },
+  crafting_table: { id: 'crafting_table', name: 'Верстак', color: 0x8B4513, hardness: 4, drops: [{ item: 'crafting_table', count: 1, chance: 1 }] },
+  furnace: { id: 'furnace', name: 'Печь', color: 0x808080, hardness: 6, drops: [{ item: 'furnace', count: 1, chance: 1 }] },
+  chest: { id: 'chest', name: 'Сундук', color: 0x8B4513, hardness: 4, drops: [{ item: 'chest', count: 1, chance: 1 }] },
+  ladder: { id: 'ladder', name: 'Лестница', color: 0xA0522D, hardness: 2, drops: [{ item: 'ladder', count: 1, chance: 1 }] },
 };
 
 // Item definitions
@@ -75,21 +82,44 @@ export const ITEM_TYPES: Record<string, ItemType> = {
   iron_pickaxe: { id: 'iron_pickaxe', name: 'Железная кирка', description: 'Прочность: 251, Урон: 8', category: 'tool', stackSize: 1, durability: TOOL_DURABILITY.iron, toolDamage: 8 },
   diamond_pickaxe: { id: 'diamond_pickaxe', name: 'Алмазная кирка', description: 'Прочность: 1562, Урон: 12', category: 'tool', stackSize: 1, durability: TOOL_DURABILITY.diamond, toolDamage: 12 },
   
+  // Utility blocks
+  torch: { id: 'torch', name: 'Факел', description: 'Освещает пещеры', category: 'block', stackSize: 64, placeable: true, blockId: 'torch' },
+  crafting_table: { id: 'crafting_table', name: 'Верстак', description: 'Для сложных рецептов', category: 'block', stackSize: 64, placeable: true, blockId: 'crafting_table' },
+  furnace: { id: 'furnace', name: 'Печь', description: 'Для плавки руды', category: 'block', stackSize: 64, placeable: true, blockId: 'furnace' },
+  chest: { id: 'chest', name: 'Сундук', description: 'Храни предметы', category: 'block', stackSize: 64, placeable: true, blockId: 'chest' },
+  ladder: { id: 'ladder', name: 'Лестница', description: 'Для подъёма', category: 'block', stackSize: 64, placeable: true, blockId: 'ladder' },
+  
   dirt_block: { id: 'dirt_block', name: 'Земля', description: 'Поставь землю', category: 'block', stackSize: 64, placeable: true, blockId: 'dirt' },
   sand_block: { id: 'sand_block', name: 'Песок', description: 'Поставь песок', category: 'block', stackSize: 64, placeable: true, blockId: 'sand' },
 };
 
-// Crafting recipes
+// Crafting recipes - Minecraft style
 export const CRAFT_RECIPES: CraftRecipe[] = [
-  { id: 'sticks', name: 'Палки', description: '2 доски = 4 палки', ingredients: [{ item: 'oak_log_item', count: 1 }], result: { item: 'stick', count: 4 }, category: 'materials' },
+  // Basic materials
+  { id: 'planks', name: 'Доски', description: '1 бревно = 4 доски', ingredients: [{ item: 'oak_log_item', count: 1 }], result: { item: 'planks_block', count: 4 }, category: 'materials' },
+  { id: 'sticks', name: 'Палки', description: '2 доски = 4 палки', ingredients: [{ item: 'planks_block', count: 2 }], result: { item: 'stick', count: 4 }, category: 'materials' },
+  { id: 'torch', name: 'Факел', description: 'Уголь + палка = 4 факела', ingredients: [{ item: 'coal', count: 1 }, { item: 'stick', count: 1 }], result: { item: 'torch', count: 4 }, category: 'materials' },
+  
+  // Smelting
   { id: 'iron_smelt', name: 'Железный слиток', description: 'Руда + уголь', ingredients: [{ item: 'iron_ore_item', count: 1 }, { item: 'coal', count: 1 }], result: { item: 'iron_ingot', count: 1 }, category: 'materials' },
   { id: 'gold_smelt', name: 'Золотой слиток', description: 'Руда + 2 угля', ingredients: [{ item: 'gold_ore_item', count: 1 }, { item: 'coal', count: 2 }], result: { item: 'gold_ingot', count: 1 }, category: 'materials' },
+  { id: 'glass', name: 'Стекло', description: 'Песок + уголь', ingredients: [{ item: 'sand_block', count: 1 }, { item: 'coal', count: 1 }], result: { item: 'glass_block_item', count: 1 }, category: 'materials' },
+  { id: 'bricks', name: 'Кирпичи', description: '4 камня + уголь = 4 кирпича', ingredients: [{ item: 'cobblestone', count: 4 }, { item: 'coal', count: 1 }], result: { item: 'brick_block_item', count: 4 }, category: 'materials' },
   
-  { id: 'wood_pickaxe', name: 'Деревянная кирка', description: 'Базовая кирка', ingredients: [{ item: 'oak_log_item', count: 3 }, { item: 'stick', count: 2 }], result: { item: 'wood_pickaxe', count: 1 }, category: 'tools' },
-  { id: 'stone_pickaxe', name: 'Каменная кирка', description: 'Крепкая кирка', ingredients: [{ item: 'cobblestone', count: 3 }, { item: 'stick', count: 2 }], result: { item: 'stone_pickaxe', count: 1 }, category: 'tools', requiresQuestion: true },
-  { id: 'iron_pickaxe', name: 'Железная кирка', description: 'Продвинутая кирка', ingredients: [{ item: 'iron_ingot', count: 3 }, { item: 'stick', count: 2 }], result: { item: 'iron_pickaxe', count: 1 }, category: 'tools', requiresQuestion: true },
-  { id: 'diamond_pickaxe', name: 'Алмазная кирка', description: 'Лучшая кирка!', ingredients: [{ item: 'diamond', count: 3 }, { item: 'stick', count: 2 }], result: { item: 'diamond_pickaxe', count: 1 }, category: 'tools', requiresQuestion: true },
-  { id: 'portal_key', name: 'Ключ портала', description: 'Нужно 20 кристаллов и 5 алмазов!', ingredients: [{ item: 'crystal', count: 20 }, { item: 'diamond', count: 5 }], result: { item: 'portal_key', count: 1 }, category: 'special' },
+  // Tools
+  { id: 'wood_pickaxe', name: 'Деревянная кирка', description: '3 доски + 2 палки', ingredients: [{ item: 'planks_block', count: 3 }, { item: 'stick', count: 2 }], result: { item: 'wood_pickaxe', count: 1 }, category: 'tools' },
+  { id: 'stone_pickaxe', name: 'Каменная кирка', description: '3 камня + 2 палки', ingredients: [{ item: 'cobblestone', count: 3 }, { item: 'stick', count: 2 }], result: { item: 'stone_pickaxe', count: 1 }, category: 'tools', requiresQuestion: true },
+  { id: 'iron_pickaxe', name: 'Железная кирка', description: '3 слитка + 2 палки', ingredients: [{ item: 'iron_ingot', count: 3 }, { item: 'stick', count: 2 }], result: { item: 'iron_pickaxe', count: 1 }, category: 'tools', requiresQuestion: true },
+  { id: 'diamond_pickaxe', name: 'Алмазная кирка', description: '3 алмаза + 2 палки', ingredients: [{ item: 'diamond', count: 3 }, { item: 'stick', count: 2 }], result: { item: 'diamond_pickaxe', count: 1 }, category: 'tools', requiresQuestion: true },
+  
+  // Building blocks
+  { id: 'crafting_table', name: 'Верстак', description: '4 доски', ingredients: [{ item: 'planks_block', count: 4 }], result: { item: 'crafting_table', count: 1 }, category: 'building' },
+  { id: 'furnace', name: 'Печь', description: '8 камней', ingredients: [{ item: 'cobblestone', count: 8 }], result: { item: 'furnace', count: 1 }, category: 'building' },
+  { id: 'chest', name: 'Сундук', description: '8 досок', ingredients: [{ item: 'planks_block', count: 8 }], result: { item: 'chest', count: 1 }, category: 'building' },
+  { id: 'ladder', name: 'Лестница', description: '7 палок = 3 лестницы', ingredients: [{ item: 'stick', count: 7 }], result: { item: 'ladder', count: 3 }, category: 'building' },
+  
+  // Special
+  { id: 'portal_key', name: 'Ключ портала', description: '20 кристаллов + 5 алмазов', ingredients: [{ item: 'crystal', count: 20 }, { item: 'diamond', count: 5 }], result: { item: 'portal_key', count: 1 }, category: 'special' },
 ];
 
 // World generation
@@ -195,10 +225,10 @@ export function generateWorld(seed?: number): WorldBlock[][][] {
   }
 
   // Add many trees with guaranteed generation
-  for (let tx = 3; tx < WORLD_SIZE - 3; tx += 4) {
-    for (let tz = 3; tz < WORLD_SIZE - 3; tz += 4) {
+  for (let tx = 3; tx < WORLD_SIZE - 3; tx += 5) {
+    for (let tz = 3; tz < WORLD_SIZE - 3; tz += 5) {
       // Random chance to place tree
-      if (Math.random() > 0.6) continue;
+      if (Math.random() > 0.7) continue;
       
       let surfaceY = -1;
       for (let y = WORLD_HEIGHT - 1; y >= 0; y--) {
