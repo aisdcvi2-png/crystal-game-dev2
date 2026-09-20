@@ -221,6 +221,21 @@ export const getItemIcon = (itemId: string): string => {
       <line x1="20" y1="20" x2="24" y2="24" stroke="#FFFFFF" stroke-width="2" opacity="0.5"/>
     </svg>`,
     
+    glass: `<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+      <rect x="6" y="6" width="20" height="20" fill="#ADD8E6" stroke="#87CEEB" stroke-width="1" opacity="0.6"/>
+      <rect x="8" y="8" width="16" height="16" fill="#E0F7FA" opacity="0.3"/>
+      <line x1="10" y1="10" x2="14" y2="14" stroke="#FFFFFF" stroke-width="1.5" opacity="0.7"/>
+      <line x1="18" y1="18" x2="22" y2="22" stroke="#FFFFFF" stroke-width="1.5" opacity="0.7"/>
+    </svg>`,
+    
+    ladder: `<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+      <rect x="8" y="4" width="3" height="24" fill="#8B4513" stroke="#654321" stroke-width="1"/>
+      <rect x="21" y="4" width="3" height="24" fill="#8B4513" stroke="#654321" stroke-width="1"/>
+      <rect x="11" y="8" width="10" height="2" fill="#A0522D" stroke="#654321" stroke-width="0.5"/>
+      <rect x="11" y="14" width="10" height="2" fill="#A0522D" stroke="#654321" stroke-width="0.5"/>
+      <rect x="11" y="20" width="10" height="2" fill="#A0522D" stroke="#654321" stroke-width="0.5"/>
+    </svg>`,
+    
     // Utility blocks
     torch: `<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
       <rect x="14" y="12" width="4" height="16" fill="#8B4513" stroke="#654321" stroke-width="1"/>
@@ -261,14 +276,6 @@ export const getItemIcon = (itemId: string): string => {
       <rect x="6" y="12" width="20" height="4" fill="#A0522D"/>
       <rect x="14" y="18" width="4" height="4" fill="#FFD700"/>
       <rect x="4" y="8" width="24" height="4" fill="#A0522D" stroke="#654321" stroke-width="1"/>
-    </svg>`,
-    
-    ladder: `<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-      <rect x="10" y="4" width="2" height="24" fill="#8B4513" stroke="#654321" stroke-width="1"/>
-      <rect x="20" y="4" width="2" height="24" fill="#8B4513" stroke="#654321" stroke-width="1"/>
-      <rect x="10" y="8" width="12" height="2" fill="#A0522D"/>
-      <rect x="10" y="14" width="12" height="2" fill="#A0522D"/>
-      <rect x="10" y="20" width="12" height="2" fill="#A0522D"/>
     </svg>`,
   };
   

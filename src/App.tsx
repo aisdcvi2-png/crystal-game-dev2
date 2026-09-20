@@ -194,6 +194,9 @@ function App() {
   const [dragOverSlot, setDragOverSlot] = useState<{ from: 'hotbar' | 'inventory'; index: number } | null>(null);
   const [portalActivated, setPortalActivated] = useState(false);
   const [crystalPositions, setCrystalPositions] = useState<Array<{id: number, x: number, y: number, z: number, collected: boolean}>>([]);
+  const [showCrystalChoice, setShowCrystalChoice] = useState(false);
+  const [crystalTimer, setCrystalTimer] = useState<number | null>(null);
+  const [pendingCrystal, setPendingCrystal] = useState<number | null>(null);
 
   const playerPosition = useRef(new THREE.Vector3(0, 3, 0));
   const subjectIndexRef = useRef(0);
@@ -379,17 +382,53 @@ function App() {
 
   const handleCrystalPickup = useCallback((crystalId: number) => {
     setDroppedCrystals(prev => prev.filter(c => c.id !== crystalId));
-    setPendingCrystalId(crystalId);
-    setCrystalNotification('✨ Кристалл подобран! Ответь на вопрос!');
+    setPendingCrystal(crystalId);
+    setShowCrystalChoice(true);
+    setCrystalNotification('✨ Кристалл подобран!');
     setTimeout(() => setCrystalNotification(null), 2000);
     if (document.pointerLockElement) document.exitPointerLock();
+  }, []);
+
+  const handleAnswerNow = useCallback(() => {
+    setShowCrystalChoice(false);
+    setPendingCrystalId(pendingCrystal);
     subjectIndexRef.current = (subjectIndexRef.current + 1) % subjects.length;
     setCurrentSubject(subjects[subjectIndexRef.current].name);
     setTimeout(() => {
       const question = getNextQuestion();
       if (question) { setCurrentQuestion(question); setGameState('question'); }
-    }, 500);
-  }, [getNextQuestion]);
+    }, 300);
+  }, [pendingCrystal, getNextQuestion]);
+
+  const handleAnswerLater = useCallback(() => {
+    setShowCrystalChoice(false);
+    setCrystalTimer(60); // 60 seconds to answer
+    setPendingCrystalId(pendingCrystal);
+    setCrystalNotification('⏰ У тебя 60 секунд чтобы ответить на вопрос!');
+    setTimeout(() => setCrystalNotification(null), 3000);
+  }, [pendingCrystal]);
+
+  // Timer countdown for crystal
+  useEffect(() => {
+    if (crystalTimer === null || crystalTimer <= 0) return;
+    
+    const interval = setInterval(() => {
+      setCrystalTimer(prev => {
+        if (prev === null) return null;
+        if (prev <= 1) {
+          // Time's up - crystal destroyed
+          clearInterval(interval);
+          setPendingCrystalId(null);
+          setCrystalNotification('💔 Кристалл разрушился!');
+          setTimeout(() => setCrystalNotification(null), 3000);
+          return null;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [crystalTimer]);
 
   const handleStart = () => {
     // Generate evenly distributed crystal positions
@@ -440,6 +479,7 @@ function App() {
       }
     }
     setCurrentQuestion(null);
+    setCrystalTimer(null); // Reset timer
     const totalAnswered = answeredIds.length + 1;
     if (totalAnswered >= 100) setGameState('win');
     else setGameState('playing');
@@ -1151,6 +1191,46 @@ function App() {
             </div>
           )}
         </>
+      )}
+
+      {showCrystalChoice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+          <div className="bg-gray-900 border-2 border-purple-500 rounded-xl p-6 max-w-md">
+            <h2 className="text-2xl font-bold text-white mb-4 text-center">💎 Кристалл подобран!</h2>
+            <p className="text-gray-300 mb-6 text-center">Что хочешь сделать?</p>
+            <div className="flex gap-4">
+              <button
+                onClick={handleAnswerNow}
+                className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg transition-colors"
+              >
+                ✅ Ответить сейчас
+              </button>
+              <button
+                onClick={handleAnswerLater}
+                className="flex-1 bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-3 px-4 rounded-lg transition-colors"
+              >
+                ⏰ Позже (60с)
+              </button>
+            </div>
+            <p className="text-gray-500 text-sm mt-4 text-center">
+              Если не ответить за 60 секунд, кристалл разрушится!
+            </p>
+          </div>
+        </div>
+      )}
+
+      {crystalTimer !== null && crystalTimer > 0 && (
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-40">
+          <div className={`px-4 py-2 rounded-lg font-bold ${crystalTimer <= 10 ? 'bg-red-600 animate-pulse' : 'bg-yellow-600'}`}>
+            ⏰ Осталось: {crystalTimer}с
+          </div>
+          <button
+            onClick={handleAnswerNow}
+            className="w-full mt-2 bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg transition-colors"
+          >
+            📝 Ответить на вопрос
+          </button>
+        </div>
       )}
 
       {gameState === 'question' && currentQuestion && (

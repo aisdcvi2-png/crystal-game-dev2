@@ -7,6 +7,9 @@ export interface BlockType {
   drops?: { item: string; count: number; chance: number }[];
   rareDrops?: { item: string; count: number; chance: number }[];
   unbreakable?: boolean;
+  light?: number;
+  climbable?: boolean;
+  transparent?: boolean;
 }
 
 // Item types
@@ -20,6 +23,9 @@ export interface ItemType {
   placeable?: boolean;
   blockId?: string;
   toolDamage?: number;
+  light?: number;
+  climbable?: boolean;
+  transparent?: boolean;
 }
 
 // Crafting recipes
@@ -56,11 +62,12 @@ export const BLOCK_TYPES: Record<string, BlockType> = {
   oak_leaves: { id: 'oak_leaves', name: 'Листва', color: 0x2d7a2d, hardness: 2, rareDrops: [{ item: 'stick', count: 1, chance: 0.2 }] },
   
   // Utility blocks
-  torch: { id: 'torch', name: 'Факел', color: 0xFFA500, hardness: 1, drops: [{ item: 'torch', count: 1, chance: 1 }] },
+  torch: { id: 'torch', name: 'Факел', color: 0xFFA500, hardness: 1, drops: [{ item: 'torch', count: 1, chance: 1 }], light: 14 },
   crafting_table: { id: 'crafting_table', name: 'Верстак', color: 0x8B4513, hardness: 4, drops: [{ item: 'crafting_table', count: 1, chance: 1 }] },
-  furnace: { id: 'furnace', name: 'Печь', color: 0x808080, hardness: 6, drops: [{ item: 'furnace', count: 1, chance: 1 }] },
+  furnace: { id: 'furnace', name: 'Печь', color: 0x808080, hardness: 6, drops: [{ item: 'furnace', count: 1, chance: 1 }], light: 13 },
   chest: { id: 'chest', name: 'Сундук', color: 0x8B4513, hardness: 4, drops: [{ item: 'chest', count: 1, chance: 1 }] },
-  ladder: { id: 'ladder', name: 'Лестница', color: 0xA0522D, hardness: 2, drops: [{ item: 'ladder', count: 1, chance: 1 }] },
+  ladder: { id: 'ladder', name: 'Лестница', color: 0xA0522D, hardness: 2, drops: [{ item: 'ladder', count: 1, chance: 1 }], climbable: true },
+  glass: { id: 'glass', name: 'Стекло', color: 0xADD8E6, hardness: 1, drops: [], transparent: true },
 };
 
 // Item definitions
@@ -84,11 +91,12 @@ export const ITEM_TYPES: Record<string, ItemType> = {
   diamond_pickaxe: { id: 'diamond_pickaxe', name: 'Алмазная кирка', description: 'Прочность: 1562, Урон: 12', category: 'tool', stackSize: 1, durability: TOOL_DURABILITY.diamond, toolDamage: 12 },
   
   // Utility blocks
-  torch: { id: 'torch', name: 'Факел', description: 'Освещает пещеры', category: 'block', stackSize: 64, placeable: true, blockId: 'torch' },
+  torch: { id: 'torch', name: 'Факел', description: 'Освещает пещеры', category: 'block', stackSize: 64, placeable: true, blockId: 'torch', light: 14 },
   crafting_table: { id: 'crafting_table', name: 'Верстак', description: 'Для сложных рецептов', category: 'block', stackSize: 64, placeable: true, blockId: 'crafting_table' },
-  furnace: { id: 'furnace', name: 'Печь', description: 'Для плавки руды', category: 'block', stackSize: 64, placeable: true, blockId: 'furnace' },
+  furnace: { id: 'furnace', name: 'Печь', description: 'Для плавки руды', category: 'block', stackSize: 64, placeable: true, blockId: 'furnace', light: 13 },
   chest: { id: 'chest', name: 'Сундук', description: 'Храни предметы', category: 'block', stackSize: 64, placeable: true, blockId: 'chest' },
-  ladder: { id: 'ladder', name: 'Лестница', description: 'Для подъёма', category: 'block', stackSize: 64, placeable: true, blockId: 'ladder' },
+  ladder: { id: 'ladder', name: 'Лестница', description: 'Для подъёма', category: 'block', stackSize: 64, placeable: true, blockId: 'ladder', climbable: true },
+  glass: { id: 'glass', name: 'Стекло', description: 'Прозрачный блок', category: 'block', stackSize: 64, placeable: true, blockId: 'glass', transparent: true },
   
   dirt_block: { id: 'dirt_block', name: 'Земля', description: 'Поставь землю', category: 'block', stackSize: 64, placeable: true, blockId: 'dirt' },
   sand_block: { id: 'sand_block', name: 'Песок', description: 'Поставь песок', category: 'block', stackSize: 64, placeable: true, blockId: 'sand' },
@@ -107,7 +115,7 @@ export const CRAFT_RECIPES: CraftRecipe[] = [
   { id: 'torch', name: 'Факел', description: 'Уголь + палка = 4 факела', ingredients: [{ item: 'coal', count: 1 }, { item: 'stick', count: 1 }], result: { item: 'torch', count: 4 }, category: 'materials', requiresWorkbench: true },
   { id: 'iron_smelt', name: 'Железный слиток', description: 'Руда + уголь', ingredients: [{ item: 'iron_ore_item', count: 1 }, { item: 'coal', count: 1 }], result: { item: 'iron_ingot', count: 1 }, category: 'materials', requiresWorkbench: true },
   { id: 'gold_smelt', name: 'Золотой слиток', description: 'Руда + 2 угля', ingredients: [{ item: 'gold_ore_item', count: 1 }, { item: 'coal', count: 2 }], result: { item: 'gold_ingot', count: 1 }, category: 'materials', requiresWorkbench: true },
-  { id: 'glass', name: 'Стекло', description: 'Песок + уголь', ingredients: [{ item: 'sand_block', count: 1 }, { item: 'coal', count: 1 }], result: { item: 'glass_block_item', count: 1 }, category: 'materials', requiresWorkbench: true },
+  { id: 'glass', name: 'Стекло', description: 'Песок + уголь = 4 стекла', ingredients: [{ item: 'sand_block', count: 1 }, { item: 'coal', count: 1 }], result: { item: 'glass', count: 4 }, category: 'materials', requiresWorkbench: true },
   { id: 'bricks', name: 'Кирпичи', description: '4 камня + уголь = 4 кирпича', ingredients: [{ item: 'cobblestone', count: 4 }, { item: 'coal', count: 1 }], result: { item: 'brick_block_item', count: 4 }, category: 'materials', requiresWorkbench: true },
   
   // Tools (requires workbench)
@@ -120,6 +128,7 @@ export const CRAFT_RECIPES: CraftRecipe[] = [
   { id: 'furnace', name: 'Печь', description: '8 камней', ingredients: [{ item: 'cobblestone', count: 8 }], result: { item: 'furnace', count: 1 }, category: 'building', requiresWorkbench: true },
   { id: 'chest', name: 'Сундук', description: '8 досок', ingredients: [{ item: 'planks_block', count: 8 }], result: { item: 'chest', count: 1 }, category: 'building', requiresWorkbench: true },
   { id: 'ladder', name: 'Лестница', description: '7 палок = 3 лестницы', ingredients: [{ item: 'stick', count: 7 }], result: { item: 'ladder', count: 3 }, category: 'building', requiresWorkbench: true },
+  { id: 'glass_block', name: 'Стеклянный блок', description: '4 стекла', ingredients: [{ item: 'glass', count: 4 }], result: { item: 'glass_block_item', count: 1 }, category: 'building', requiresWorkbench: true },
   
   // Special (requires workbench)
   { id: 'portal_key', name: 'Ключ портала', description: '20 кристаллов + 5 алмазов', ingredients: [{ item: 'crystal', count: 20 }, { item: 'diamond', count: 5 }], result: { item: 'portal_key', count: 1 }, category: 'special', requiresWorkbench: true },
