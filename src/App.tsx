@@ -17,17 +17,17 @@ function App() {
   const [correctAnswers, setCorrectAnswers] = useState(0);
   const [currentSubject, setCurrentSubject] = useState<string | null>(null);
   const [availableCrystals, setAvailableCrystals] = useState<number[]>(Array.from({ length: 20 }, (_, i) => i));
+  const [pendingCrystal, setPendingCrystal] = useState<number | null>(null);
+  const [breakProgress, setBreakProgress] = useState<{ progress: number; max: number; isOre: boolean } | null>(null);
   const playerPosition = useRef(new THREE.Vector3(0, 3, 0));
   const subjectIndexRef = useRef(0);
 
   const totalCrystals = 20;
 
   const getNextQuestion = useCallback((): Question | null => {
-    // Get unanswered questions
     const unanswered = questions.filter(q => !answeredIds.includes(q.id));
     if (unanswered.length === 0) return null;
     
-    // Cycle through subjects
     const currentSubjectName = subjects[subjectIndexRef.current % subjects.length].name;
     const subjectQuestions = unanswered.filter(q => q.subject === currentSubjectName);
     
@@ -35,7 +35,6 @@ function App() {
       return subjectQuestions[Math.floor(Math.random() * subjectQuestions.length)];
     }
     
-    // If no questions for current subject, pick any unanswered
     subjectIndexRef.current++;
     const remaining = questions.filter(q => !answeredIds.includes(q.id));
     if (remaining.length > 0) {
@@ -46,30 +45,28 @@ function App() {
 
   const handleStart = () => {
     setGameState('playing');
-    // Show first subject hint
     setCurrentSubject(subjects[0].name);
   };
 
-  const lastCrystalRef = useRef<number>(-1);
-
+  // Called when a crystal drops from a broken block
   const handleCrystalCollected = useCallback((crystalId: number) => {
-    // Temporarily hide crystal while showing question
+    // Remove crystal from available (it's been mined)
     setAvailableCrystals(prev => prev.filter(id => id !== crystalId));
-    lastCrystalRef.current = crystalId;
+    setPendingCrystal(crystalId);
     
-    // Cycle through subjects based on crystal collected
-    const subjectIdx = (crystalsCollected + 1) % subjects.length;
-    setCurrentSubject(subjects[subjectIdx].name);
+    // Cycle to next subject
+    subjectIndexRef.current = (subjectIndexRef.current + 1) % subjects.length;
+    setCurrentSubject(subjects[subjectIndexRef.current].name);
     
-    // Show question for the current subject
+    // Show question after a short delay
     setTimeout(() => {
       const question = getNextQuestion();
       if (question) {
         setCurrentQuestion(question);
         setGameState('question');
       }
-    }, 500);
-  }, [getNextQuestion, crystalsCollected]);
+    }, 800);
+  }, [getNextQuestion]);
 
   const handleStartQuestion = () => {
     const question = getNextQuestion();
@@ -84,16 +81,20 @@ function App() {
       setAnsweredIds(prev => [...prev, currentQuestion.id]);
       if (correct) {
         setCorrectAnswers(prev => prev + 1);
-        setCrystalsCollected(prev => prev + 1);
+        // Crystal is collected!
+        if (pendingCrystal !== null) {
+          setCrystalsCollected(prev => prev + 1);
+          setPendingCrystal(null);
+        }
       } else {
-        // Return crystal if answer was wrong
-        if (lastCrystalRef.current >= 0) {
-          setAvailableCrystals(prev => [...prev, lastCrystalRef.current]);
+        // Wrong answer - crystal is lost, put it back
+        if (pendingCrystal !== null) {
+          setAvailableCrystals(prev => [...prev, pendingCrystal]);
+          setPendingCrystal(null);
         }
       }
     }
     setCurrentQuestion(null);
-    lastCrystalRef.current = -1;
     
     // Check if all questions answered
     const totalAnswered = answeredIds.length + 1;
@@ -101,11 +102,16 @@ function App() {
       setGameState('win');
     } else {
       setGameState('playing');
-      // Move to next subject
-      subjectIndexRef.current = (subjectIndexRef.current + 1) % subjects.length;
-      setCurrentSubject(subjects[subjectIndexRef.current].name);
     }
   };
+
+  const handleBreakProgress = useCallback((progress: number, maxHealth: number, isOre: boolean) => {
+    if (progress === 0) {
+      setBreakProgress(null);
+    } else {
+      setBreakProgress({ progress, max: maxHealth, isOre });
+    }
+  }, []);
 
   const handleRestart = () => {
     setGameState('start');
@@ -115,6 +121,8 @@ function App() {
     setCorrectAnswers(0);
     setCurrentSubject(null);
     setAvailableCrystals(Array.from({ length: 20 }, (_, i) => i));
+    setPendingCrystal(null);
+    setBreakProgress(null);
     subjectIndexRef.current = 0;
   };
 
@@ -132,6 +140,7 @@ function App() {
             onCrystalCollected={handleCrystalCollected}
             playerPosition={playerPosition}
             availableCrystals={availableCrystals}
+            onBreakProgress={handleBreakProgress}
           />
           <HUD
             crystalsCollected={crystalsCollected}
@@ -140,6 +149,7 @@ function App() {
             correctAnswers={correctAnswers}
             currentSubject={currentSubject}
             onStartQuestion={handleStartQuestion}
+            breakProgress={breakProgress}
           />
         </>
       )}
