@@ -113,19 +113,26 @@ export default function GameWorld({
     const ctx = audioContextRef.current;
     const now = ctx.currentTime;
     
-    // Create "привет" sound using oscillators
-    const notes = [440, 550, 660]; // Simple greeting melody
-    notes.forEach((freq, i) => {
+    // Create "тулулу" sound - three notes: ту-лу-лу
+    const notes = [
+      { freq: 523, duration: 0.15 }, // ту (C5)
+      { freq: 659, duration: 0.2 },  // лу (E5)
+      { freq: 659, duration: 0.25 }  // лу (E5 longer)
+    ];
+    
+    let time = now;
+    notes.forEach((note) => {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.connect(gain);
       gain.connect(ctx.destination);
-      osc.frequency.value = freq;
+      osc.frequency.value = note.freq;
       osc.type = 'sine';
-      gain.gain.setValueAtTime(0.15, now + i * 0.15);
-      gain.gain.exponentialRampToValueAtTime(0.01, now + i * 0.15 + 0.14);
-      osc.start(now + i * 0.15);
-      osc.stop(now + i * 0.15 + 0.15);
+      gain.gain.setValueAtTime(0.2, time);
+      gain.gain.exponentialRampToValueAtTime(0.01, time + note.duration);
+      osc.start(time);
+      osc.stop(time + note.duration);
+      time += note.duration + 0.05; // Small gap between notes
     });
   }, []);
 
@@ -224,44 +231,34 @@ export default function GameWorld({
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x87CEEB);
-    scene.fog = new THREE.Fog(0x87CEEB, 50, 100);
+    scene.fog = new THREE.Fog(0x87CEEB, 40, 80);
     sceneRef.current = scene;
 
     const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 200);
     cameraRef.current = camera;
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    // Optimized renderer
+    const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.2;
+    renderer.setPixelRatio(1);
+    renderer.shadowMap.enabled = false; // Disable shadows for performance
     mountRef.current.appendChild(renderer.domElement);
 
-    // Lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+    // Simple lighting
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
     scene.add(ambientLight);
-    const sunLight = new THREE.DirectionalLight(0xfff5e0, 1.2);
+    const sunLight = new THREE.DirectionalLight(0xffffff, 0.6);
     sunLight.position.set(40, 80, 30);
-    sunLight.castShadow = true;
-    sunLight.shadow.mapSize.width = 2048;
-    sunLight.shadow.mapSize.height = 2048;
-    sunLight.shadow.camera.near = 0.5;
-    sunLight.shadow.camera.far = 150;
-    sunLight.shadow.camera.left = -50;
-    sunLight.shadow.camera.right = 50;
-    sunLight.shadow.camera.top = 50;
-    sunLight.shadow.camera.bottom = -50;
     scene.add(sunLight);
-    const hemiLight = new THREE.HemisphereLight(0x87CEEB, 0x556B2F, 0.4);
-    scene.add(hemiLight);
 
     // Generate world
     const worldData = generateWorld();
     worldDataRef.current = worldData;
 
-    // Create block meshes
+    // Use InstancedMesh for performance - group blocks by type
+    const blockTypeCounts: Record<string, number> = {};
+    const blockPositions: Record<string, Array<{x: number, y: number, z: number}>> = {};
+    
     for (let x = 0; x < WORLD_SIZE; x++) {
       for (let z = 0; z < WORLD_SIZE; z++) {
         for (let y = 0; y < WORLD_HEIGHT; y++) {
@@ -280,12 +277,42 @@ export default function GameWorld({
           const isExposed = neighbors.some(n => !n) || x === 0 || x === WORLD_SIZE-1 || z === 0 || z === WORLD_SIZE-1;
           
           if (isExposed) {
-            const mesh = createBlockMesh(scene, block.type, x, y, z);
-            blockMeshesRef.current.set(getBlockKey(x, y, z), mesh);
+            if (!blockTypeCounts[block.type]) {
+              blockTypeCounts[block.type] = 0;
+              blockPositions[block.type] = [];
+            }
+            blockTypeCounts[block.type]++;
+            blockPositions[block.type].push({x, y, z});
           }
         }
       }
     }
+
+    // Create InstancedMesh for each block type
+    const geo = new THREE.BoxGeometry(1, 1, 1);
+    Object.keys(blockTypeCounts).forEach(type => {
+      const blockType = BLOCK_TYPES[type];
+      const count = blockTypeCounts[type];
+      
+      let material: THREE.Material;
+      if (blockType.liquid) {
+        material = new THREE.MeshLambertMaterial({ color: blockType.color, transparent: true, opacity: 0.6 });
+      } else {
+        material = new THREE.MeshLambertMaterial({ color: blockType.color });
+      }
+      
+      const instancedMesh = new THREE.InstancedMesh(geo, material, count);
+      const matrix = new THREE.Matrix4();
+      
+      blockPositions[type].forEach((pos, i) => {
+        matrix.setPosition(pos.x + 0.5, pos.y + 0.5, pos.z + 0.5);
+        instancedMesh.setMatrixAt(i, matrix);
+      });
+      
+      instancedMesh.instanceMatrix.needsUpdate = true;
+      instancedMesh.userData = { blockType: type };
+      scene.add(instancedMesh);
+    });
 
     // Pickaxe
     const pickaxe = new THREE.Group();
@@ -411,20 +438,9 @@ export default function GameWorld({
       worldData.blocks[x][z][y] = null as any;
     };
 
+    // Particles disabled for performance
     const createParticles = (pos: THREE.Vector3, color: number) => {
-      const count = 10;
-      const geo = new THREE.BufferGeometry();
-      const positions = new Float32Array(count * 3);
-      for (let i = 0; i < count; i++) {
-        positions[i * 3] = pos.x + (Math.random() - 0.5) * 0.8;
-        positions[i * 3 + 1] = pos.y + (Math.random() - 0.5) * 0.8;
-        positions[i * 3 + 2] = pos.z + (Math.random() - 0.5) * 0.8;
-      }
-      geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-      const mat = new THREE.PointsMaterial({ color, size: 0.12, transparent: true, opacity: 1 });
-      const points = new THREE.Points(geo, mat);
-      scene.add(points);
-      particlesRef.current.push(points);
+      // No particles for better performance
     };
 
     // Animation loop
@@ -457,18 +473,18 @@ export default function GameWorld({
       const newZ = camera.position.z + velocityRef.current.z;
       const feetY = Math.floor(newY - 1.5);
 
+      // Optimized collision detection
+      const isSolid = (x: number, y: number, z: number) => {
+        if (x < 0 || x >= WORLD_SIZE || y < 0 || y >= WORLD_HEIGHT || z < 0 || z >= WORLD_SIZE) return false;
+        const block = worldData.blocks[x]?.[z]?.[y];
+        return block && !BLOCK_TYPES[block.type]?.transparent && !BLOCK_TYPES[block.type]?.liquid;
+      };
+
       // X collision
       const checkX = Math.floor(newX + (velocityRef.current.x > 0 ? 0.3 : -0.3));
       const pz = Math.floor(newZ);
-      if (checkX >= 0 && checkX < WORLD_SIZE && pz >= 0 && pz < WORLD_SIZE) {
-        const b1 = worldData.blocks[checkX]?.[pz]?.[feetY];
-        const b2 = worldData.blocks[checkX]?.[pz]?.[feetY + 1];
-        if ((b1 && !BLOCK_TYPES[b1.type]?.transparent && !BLOCK_TYPES[b1.type]?.liquid) || 
-            (b2 && !BLOCK_TYPES[b2.type]?.transparent && !BLOCK_TYPES[b2.type]?.liquid)) {
-          velocityRef.current.x = 0;
-        } else {
-          camera.position.x = newX;
-        }
+      if (isSolid(checkX, feetY, pz) || isSolid(checkX, feetY + 1, pz)) {
+        velocityRef.current.x = 0;
       } else {
         camera.position.x = Math.max(0.5, Math.min(WORLD_SIZE - 0.5, newX));
       }
@@ -476,42 +492,29 @@ export default function GameWorld({
       // Z collision
       const checkZ = Math.floor(newZ + (velocityRef.current.z > 0 ? 0.3 : -0.3));
       const cpx = Math.floor(camera.position.x);
-      if (cpx >= 0 && cpx < WORLD_SIZE && checkZ >= 0 && checkZ < WORLD_SIZE) {
-        const b1 = worldData.blocks[cpx]?.[checkZ]?.[feetY];
-        const b2 = worldData.blocks[cpx]?.[checkZ]?.[feetY + 1];
-        if ((b1 && !BLOCK_TYPES[b1.type]?.transparent && !BLOCK_TYPES[b1.type]?.liquid) || 
-            (b2 && !BLOCK_TYPES[b2.type]?.transparent && !BLOCK_TYPES[b2.type]?.liquid)) {
-          velocityRef.current.z = 0;
-        } else {
-          camera.position.z = newZ;
-        }
+      if (isSolid(cpx, feetY, checkZ) || isSolid(cpx, feetY + 1, checkZ)) {
+        velocityRef.current.z = 0;
       } else {
         camera.position.z = Math.max(0.5, Math.min(WORLD_SIZE - 0.5, newZ));
       }
 
+      // Y collision (ground)
       camera.position.y = newY;
       if (velocityRef.current.y < 0) {
         const groundCheck = Math.floor(camera.position.y - 1.6);
         const gpx = Math.floor(camera.position.x);
         const gpz = Math.floor(camera.position.z);
-        if (gpx >= 0 && gpx < WORLD_SIZE && gpz >= 0 && gpz < WORLD_SIZE) {
-          const gb = worldData.blocks[gpx]?.[gpz]?.[groundCheck];
-          if (gb && !BLOCK_TYPES[gb.type]?.transparent && !BLOCK_TYPES[gb.type]?.liquid) {
-            camera.position.y = groundCheck + 2.6;
-            velocityRef.current.y = 0;
-            onGroundRef.current = true;
-          }
+        if (isSolid(gpx, groundCheck, gpz)) {
+          camera.position.y = groundCheck + 2.6;
+          velocityRef.current.y = 0;
+          onGroundRef.current = true;
         }
-      }
-      if (velocityRef.current.y > 0) {
+      } else if (velocityRef.current.y > 0) {
         const ceilCheck = Math.floor(camera.position.y + 0.3);
         const cpx2 = Math.floor(camera.position.x);
         const cpz2 = Math.floor(camera.position.z);
-        if (cpx2 >= 0 && cpx2 < WORLD_SIZE && cpz2 >= 0 && cpz2 < WORLD_SIZE) {
-          const cb = worldData.blocks[cpx2]?.[cpz2]?.[ceilCheck];
-          if (cb && !BLOCK_TYPES[cb.type]?.transparent && !BLOCK_TYPES[cb.type]?.liquid) {
-            velocityRef.current.y = 0;
-          }
+        if (isSolid(cpx2, ceilCheck, cpz2)) {
+          velocityRef.current.y = 0;
         }
       }
       if (camera.position.y < -5) {
@@ -539,71 +542,82 @@ export default function GameWorld({
         }
       }
 
-      // Mining
+      // Mining - optimized raycast
       if (mouseRef.current.leftDown && mouseRef.current.locked) {
         raycasterRef.current.setFromCamera(new THREE.Vector2(0, 0), camera);
-        raycasterRef.current.far = 6;
-        const allMeshes = Array.from(blockMeshesRef.current.values());
-        const intersects = raycasterRef.current.intersectObjects(allMeshes, false);
-        if (intersects.length > 0) {
-          const hit = intersects[0];
-          const mesh = hit.object as THREE.Mesh;
-          const { x, y, z } = mesh.userData;
-          const blockData = worldData.blocks[x]?.[z]?.[y];
-          if (blockData && !BLOCK_TYPES[blockData.type]?.unbreakable) {
-            if (swingCooldownRef.current <= 0 && !pickaxeSwingRef.current.swinging) {
-              pickaxeSwingRef.current.swinging = true;
-              pickaxeSwingRef.current.time = 0;
-              swingCooldownRef.current = 0.25;
-              const selectedItem = hotbarRef.current[selectedSlotRef.current];
-              let toolSpeed = 1;
-              if (selectedItem) {
-                const itemData = ITEM_TYPES[selectedItem];
-                if (itemData?.toolSpeed) toolSpeed = itemData.toolSpeed;
-              }
-              blockData.health -= toolSpeed;
-              const blockTypeData = BLOCK_TYPES[blockData.type];
-              const damageRatio = 1 - (blockData.health / blockData.maxHealth);
-              if (mesh.material && !Array.isArray(mesh.material)) {
-                const baseColor = new THREE.Color(blockTypeData.color);
-                baseColor.lerp(new THREE.Color(0x222222), damageRatio * 0.5);
-                (mesh.material as THREE.MeshLambertMaterial).color = baseColor;
-              }
-              createParticles(hit.point, blockTypeData.color);
-              onBreakProgress(blockData.maxHealth - blockData.health, blockData.maxHealth, blockTypeData.name);
-              if (blockData.health <= 0) {
-                createParticles(new THREE.Vector3(x + 0.5, y + 0.5, z + 0.5), blockTypeData.color);
-                removeBlock(x, y, z);
-                revealNeighbors(x, y, z);
-                onBlockMined(blockData.type, x, y, z);
-                onBreakProgress(0, 1, '');
-              }
+        raycasterRef.current.far = 5;
+        
+        // Simple raycast - check blocks along ray
+        const ray = raycasterRef.current.ray;
+        const maxDist = 5;
+        const step = 0.2;
+        let hitBlock = null;
+        
+        for (let d = 0; d < maxDist; d += step) {
+          const point = ray.at(d, new THREE.Vector3());
+          const bx = Math.floor(point.x);
+          const by = Math.floor(point.y);
+          const bz = Math.floor(point.z);
+          
+          if (bx >= 0 && bx < WORLD_SIZE && by >= 0 && by < WORLD_HEIGHT && bz >= 0 && bz < WORLD_SIZE) {
+            const block = worldData.blocks[bx]?.[bz]?.[by];
+            if (block && !BLOCK_TYPES[block.type]?.liquid) {
+              hitBlock = { x: bx, y: by, z: bz, block, point };
+              break;
+            }
+          }
+        }
+        
+        if (hitBlock && !BLOCK_TYPES[hitBlock.block.type]?.unbreakable) {
+          if (swingCooldownRef.current <= 0 && !pickaxeSwingRef.current.swinging) {
+            pickaxeSwingRef.current.swinging = true;
+            pickaxeSwingRef.current.time = 0;
+            swingCooldownRef.current = 0.25;
+            
+            const selectedItem = hotbarRef.current[selectedSlotRef.current];
+            let toolSpeed = 1;
+            if (selectedItem) {
+              const itemData = ITEM_TYPES[selectedItem];
+              if (itemData?.toolSpeed) toolSpeed = itemData.toolSpeed;
+            }
+            
+            hitBlock.block.health -= toolSpeed;
+            const blockTypeData = BLOCK_TYPES[hitBlock.block.type];
+            onBreakProgress(hitBlock.block.maxHealth - hitBlock.block.health, hitBlock.block.maxHealth, blockTypeData.name);
+            
+            if (hitBlock.block.health <= 0) {
+              removeBlock(hitBlock.x, hitBlock.y, hitBlock.z);
+              revealNeighbors(hitBlock.x, hitBlock.y, hitBlock.z);
+              onBlockMined(hitBlock.block.type, hitBlock.x, hitBlock.y, hitBlock.z);
+              onBreakProgress(0, 1, '');
             }
           }
         }
       }
 
-      // Place block
+      // Place block - optimized
       if (mouseRef.current.rightDown && mouseRef.current.locked && placeCooldownRef.current <= 0) {
         const selectedItem = hotbarRef.current[selectedSlotRef.current];
         if (selectedItem) {
           const itemData = ITEM_TYPES[selectedItem];
           if (itemData?.placeable && itemData.blockId) {
-            raycasterRef.current.setFromCamera(new THREE.Vector2(0, 0), camera);
-            raycasterRef.current.far = 6;
-            const allMeshes = Array.from(blockMeshesRef.current.values());
-            const intersects = raycasterRef.current.intersectObjects(allMeshes, false);
-            if (intersects.length > 0) {
-              const hit = intersects[0];
-              const normal = hit.face?.normal;
-              if (normal) {
-                const mesh = hit.object as THREE.Mesh;
-                const { x, y, z } = mesh.userData;
-                const px = x + Math.round(normal.x);
-                const py = y + Math.round(normal.y);
-                const pz = z + Math.round(normal.z);
-                if (px >= 0 && px < WORLD_SIZE && py >= 0 && py < WORLD_HEIGHT && pz >= 0 && pz < WORLD_SIZE) {
-                  if (!worldData.blocks[px][pz][py]) {
+            const ray = raycasterRef.current.ray;
+            const maxDist = 5;
+            const step = 0.2;
+            let lastEmpty = null;
+            
+            for (let d = 0; d < maxDist; d += step) {
+              const point = ray.at(d, new THREE.Vector3());
+              const bx = Math.floor(point.x);
+              const by = Math.floor(point.y);
+              const bz = Math.floor(point.z);
+              
+              if (bx >= 0 && bx < WORLD_SIZE && by >= 0 && by < WORLD_HEIGHT && bz >= 0 && bz < WORLD_SIZE) {
+                const block = worldData.blocks[bx]?.[bz]?.[by];
+                if (block && !BLOCK_TYPES[block.type]?.liquid) {
+                  // Found solid block, place on previous empty position
+                  if (lastEmpty) {
+                    const { x: px, y: py, z: pz } = lastEmpty;
                     const playerBlockX = Math.floor(camera.position.x);
                     const playerBlockY = Math.floor(camera.position.y - 1);
                     const playerBlockZ = Math.floor(camera.position.z);
@@ -616,6 +630,9 @@ export default function GameWorld({
                       placeCooldownRef.current = 0.3;
                     }
                   }
+                  break;
+                } else if (!block) {
+                  lastEmpty = { x: bx, y: by, z: bz };
                 }
               }
             }
@@ -631,10 +648,9 @@ export default function GameWorld({
         if (dist < 2) onCrystalPickupRef.current(crystal.id);
       });
 
-      // Animate crystals
+      // Simple crystal animation
       crystalMeshesRef.current.forEach((group) => {
-        group.rotation.y += 0.03;
-        group.position.y += Math.sin(time * 3) * 0.003;
+        group.rotation.y += 0.02;
       });
 
       // Animate portal
@@ -652,72 +668,45 @@ export default function GameWorld({
         }
       }
 
-      // NPC movement
+      // Optimized NPC movement
       npcsRef.current.forEach(npc => {
-        const dir = new THREE.Vector3().subVectors(npc.target, npc.position);
-        dir.y = 0;
-        if (dir.length() < 1) {
+        const dx = npc.target.x - npc.position.x;
+        const dz = npc.target.z - npc.position.z;
+        const dist = Math.sqrt(dx * dx + dz * dz);
+        
+        if (dist < 1) {
           // Pick new target
-          npc.target.set(
-            npc.position.x + (Math.random() - 0.5) * 15,
-            npc.position.y,
-            npc.position.z + (Math.random() - 0.5) * 15
-          );
-          npc.target.x = Math.max(2, Math.min(WORLD_SIZE - 2, npc.target.x));
-          npc.target.z = Math.max(2, Math.min(WORLD_SIZE - 2, npc.target.z));
-          // Update Y to surface
-          const tx = Math.floor(npc.target.x);
-          const tz = Math.floor(npc.target.z);
-          if (tx >= 0 && tx < WORLD_SIZE && tz >= 0 && tz < WORLD_SIZE) {
-            npc.target.y = getSurfaceHeight(worldData.blocks, tx, tz) + 1;
+          npc.target.x = Math.max(2, Math.min(WORLD_SIZE - 2, npc.position.x + (Math.random() - 0.5) * 15));
+          npc.target.z = Math.max(2, Math.min(WORLD_SIZE - 2, npc.position.z + (Math.random() - 0.5) * 15));
+        } else {
+          // Move towards target
+          const moveX = (dx / dist) * npc.speed;
+          const moveZ = (dz / dist) * npc.speed;
+          npc.position.x += moveX;
+          npc.position.z += moveZ;
+          
+          // Keep on surface
+          const bx = Math.floor(npc.position.x);
+          const bz = Math.floor(npc.position.z);
+          if (bx >= 0 && bx < WORLD_SIZE && bz >= 0 && bz < WORLD_SIZE) {
+            npc.position.y = getSurfaceHeight(worldData.blocks, bx, bz) + 1;
           }
+          
+          npc.mesh.position.copy(npc.position);
+          npc.mesh.rotation.y = Math.atan2(dx, dz);
         }
-        dir.normalize();
-        npc.position.add(dir.multiplyScalar(npc.speed));
-        
-        // Keep on surface
-        const bx = Math.floor(npc.position.x);
-        const bz = Math.floor(npc.position.z);
-        if (bx >= 0 && bx < WORLD_SIZE && bz >= 0 && bz < WORLD_SIZE) {
-          const surfaceY = getSurfaceHeight(worldData.blocks, bx, bz);
-          npc.position.y = surfaceY + 1;
-        }
-        
-        npc.mesh.position.copy(npc.position);
-        npc.mesh.lookAt(npc.target.x, npc.position.y, npc.target.z);
 
-        // Walking animation
-        const walkPhase = time * 5;
-        npc.mesh.children.forEach((child, i) => {
-          if (i >= 5) { // Legs
-            (child as THREE.Mesh).rotation.x = Math.sin(walkPhase + (i === 5 ? 0 : Math.PI)) * 0.5;
-          }
-          if (i >= 3 && i <= 4) { // Arms
-            (child as THREE.Mesh).rotation.x = Math.sin(walkPhase + (i === 3 ? Math.PI : 0)) * 0.3;
-          }
-        });
-
-        // Greet player when close
-        const distToPlayer = npc.position.distanceTo(camera.position);
+        // Simple greeting check
+        const dxp = npc.position.x - camera.position.x;
+        const dzp = npc.position.z - camera.position.z;
+        const distToPlayer = Math.sqrt(dxp * dxp + dzp * dzp);
         if (distToPlayer < 5 && time - npc.lastGreet > 5) {
           npc.lastGreet = time;
           playGreetSound();
         }
       });
 
-      // Particles
-      particlesRef.current = particlesRef.current.filter(p => {
-        const mat = p.material as THREE.PointsMaterial;
-        mat.opacity -= 0.03;
-        p.position.y += 0.01;
-        if (mat.opacity <= 0) {
-          scene.remove(p);
-          p.geometry.dispose();
-          mat.dispose();
-          return false;
-        }
-        return true;
-      });
+      // Particles disabled for performance
 
       renderer.render(scene, camera);
     };
