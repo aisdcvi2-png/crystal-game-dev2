@@ -482,19 +482,29 @@ export default function GameWorld({
       }
       playerPosition.current.copy(camera.position);
 
-      // Pickaxe animation
+      // Pickaxe animation - slower and smoother
       if (pickaxeRef.current) {
         if (pickaxeSwingRef.current.swinging) {
-          pickaxeSwingRef.current.time += 0.18;
+          pickaxeSwingRef.current.time += 0.08; // Slower animation (was 0.18)
           const t = pickaxeSwingRef.current.time;
-          pickaxeRef.current.rotation.x = -Math.sin(t * Math.PI) * 1.5;
+          
+          // Smoother swing with easing
+          const swingAngle = Math.sin(t * Math.PI) * 1.2;
+          const tiltAngle = Math.sin(t * Math.PI * 0.5) * 0.3;
+          
+          pickaxeRef.current.rotation.x = -swingAngle;
+          pickaxeRef.current.rotation.z = -0.6 + tiltAngle;
+          
           if (t >= 1) {
             pickaxeSwingRef.current.swinging = false;
             pickaxeSwingRef.current.time = 0;
             pickaxeRef.current.rotation.x = 0;
+            pickaxeRef.current.rotation.z = -0.6;
           }
         } else {
-          pickaxeRef.current.rotation.x = Math.sin(time * 1.2) * 0.02;
+          // Idle animation - gentle bobbing
+          pickaxeRef.current.rotation.x = Math.sin(time * 1.5) * 0.03;
+          pickaxeRef.current.position.y = -0.35 + Math.sin(time * 2) * 0.01;
         }
       }
 

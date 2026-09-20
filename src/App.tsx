@@ -1,7 +1,8 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import * as THREE from 'three';
 import GameWorld from './components/GameWorld';
-import { questions, subjects, Question } from './data/questions';
+import { subjects, Question } from './data/questions';
+import { generateDynamicQuestions } from './data/dynamicQuestions';
 import { BLOCK_TYPES, ITEM_TYPES, CRAFT_RECIPES, TOOL_DURABILITY } from './data/gameData';
 import ItemIcon from './components/ItemIcon';
 
@@ -172,6 +173,7 @@ function App() {
   const [toolDurability, setToolDurability] = useState<Record<string, number>>({ wood_pickaxe: TOOL_DURABILITY.wood });
   const [dragItem, setDragItem] = useState<{ item: string; from: 'hotbar' | 'inventory'; index: number } | null>(null);
   const [portalActivated, setPortalActivated] = useState(false);
+  const [dynamicQuestions, setDynamicQuestions] = useState<Question[]>([]);
 
   const playerPosition = useRef(new THREE.Vector3(0, 3, 0));
   const subjectIndexRef = useRef(0);
@@ -250,16 +252,16 @@ function App() {
   }, [hotbar, inventory]);
 
   const getNextQuestion = useCallback((): Question | null => {
-    const unanswered = questions.filter(q => !answeredIds.includes(q.id));
+    const unanswered = dynamicQuestions.filter(q => !answeredIds.includes(q.id));
     if (unanswered.length === 0) return null;
     const currentSubjectName = subjects[subjectIndexRef.current % subjects.length].name;
     const subjectQuestions = unanswered.filter(q => q.subject === currentSubjectName);
     if (subjectQuestions.length > 0) return subjectQuestions[Math.floor(Math.random() * subjectQuestions.length)];
     subjectIndexRef.current++;
-    const remaining = questions.filter(q => !answeredIds.includes(q.id));
+    const remaining = dynamicQuestions.filter(q => !answeredIds.includes(q.id));
     if (remaining.length > 0) return remaining[Math.floor(Math.random() * remaining.length)];
     return null;
-  }, [answeredIds]);
+  }, [answeredIds, dynamicQuestions]);
 
   const handleBlockMined = useCallback((blockType: string, x: number, y: number, z: number) => {
     const blockData = BLOCK_TYPES[blockType];
@@ -306,7 +308,14 @@ function App() {
     }, 500);
   }, [getNextQuestion]);
 
-  const handleStart = () => { setGameState('playing'); setCurrentSubject(subjects[0].name); };
+  const handleStart = () => {
+    // Generate dynamic questions with random seed
+    const seed = Math.floor(Math.random() * 100000);
+    const questions = generateDynamicQuestions(seed);
+    setDynamicQuestions(questions);
+    setGameState('playing');
+    setCurrentSubject(subjects[0].name);
+  };
 
   const handleStartQuestion = () => {
     if (document.pointerLockElement) document.exitPointerLock();
@@ -348,6 +357,13 @@ function App() {
   const handleCraft = useCallback((recipeId: string) => {
     const recipe = CRAFT_RECIPES.find(r => r.id === recipeId);
     if (!recipe) return;
+    
+    // Check if workbench is required
+    if (recipe.requiresWorkbench && countItem('crafting_table') === 0) {
+      showNotif('⚠️ Нужен верстак!');
+      return;
+    }
+    
     const hasAll = recipe.ingredients.every(ing => countItem(ing.item) >= ing.count);
     if (!hasAll) { showNotif('Недостаточно материалов!'); return; }
     recipe.ingredients.forEach(ing => removeItem(ing.item, ing.count));
@@ -373,6 +389,7 @@ function App() {
     setSelectedSlot(0); setDroppedCrystals([]); setPendingCrystalId(null);
     setToolDurability({ wood_pickaxe: TOOL_DURABILITY.wood }); subjectIndexRef.current = 0;
     setPortalActivated(false);
+    setDynamicQuestions([]);
   };
 
   // Keyboard handler
@@ -664,10 +681,10 @@ function App() {
                             <div className="flex items-center gap-2">
                               <ItemIcon itemId={recipe.result.item} size={32} />
                               <div className="flex-1 min-w-0">
-                                <div className="text-white font-bold text-xs truncate">{recipe.name}</div>
-                                <div className="text-gray-400 text-[10px] truncate">{recipe.description}</div>
-                                {recipe.requiresQuestion && <div className="text-yellow-400 text-[10px]">⚠️ Вопрос</div>}
-                              </div>
+                              <div className="text-white font-bold text-xs truncate">{recipe.name}</div>
+                              <div className="text-gray-400 text-[10px] truncate">{recipe.description}</div>
+                              {recipe.requiresWorkbench && <div className="text-orange-400 text-[10px]">🔨 Верстак</div>}
+                              {recipe.requiresQuestion && <div className="text-yellow-400 text-[10px]">⚠️ Вопрос</div>}                              </div>
                               {craftable && <div className="text-green-400 text-xs font-bold">✓</div>}
                             </div>
                             <div className="mt-1 flex flex-wrap gap-1">
