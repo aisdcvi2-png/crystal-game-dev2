@@ -575,8 +575,10 @@ function App() {
 
   // Open workbench if player has one
   const openWorkbench = useCallback(() => {
+    console.log('openWorkbench called');
     const workbenchCount = hotbarRef.current.filter(item => item === 'crafting_table').length +
                           inventoryRef.current.filter(item => item === 'crafting_table').length;
+    console.log('workbenchCount:', workbenchCount);
     if (workbenchCount === 0) {
       showNotif('⚠️ Нужен верстак!');
       return;
@@ -984,8 +986,12 @@ function App() {
                   
                   {/* Workbench button */}
                   <button
-                    onClick={openWorkbench}
-                    className="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 px-4 rounded-lg transition-colors mb-3"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      console.log('Button clicked');
+                      openWorkbench();
+                    }}
+                    className="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 px-4 rounded-lg transition-colors mb-3 pointer-events-auto"
                   >
                     🔨 Открыть верстак
                   </button>
