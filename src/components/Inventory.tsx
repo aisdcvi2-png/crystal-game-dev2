@@ -98,7 +98,7 @@ export default function Inventory({ hotbar, inventory, setHotbar, setInventory, 
           ${isHotbar ? 'border-amber-500/50 bg-gray-800/80' : 'border-gray-600/50 bg-gray-800/60'}
           hover:border-white/50 hover:bg-gray-700/80`}
       >
-        {itemData && (
+        {itemData && item && (
           <>
             <ItemIcon itemId={item} size={36} />
             <span className="absolute bottom-0.5 right-1 text-xs text-white font-bold">

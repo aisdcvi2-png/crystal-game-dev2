@@ -1,5 +1,6 @@
 import { subjects } from '../data/questions';
 import { ITEM_TYPES } from '../data/gameData';
+import ItemIcon from './ItemIcon';
 
 interface HUDProps {
   crystalsCollected: number;
@@ -13,11 +14,12 @@ interface HUDProps {
   selectedSlot: number;
   notification: string | null;
   crystalNotification: string | null;
+  hasPortalKey: boolean;
 }
 
 export default function HUD({
   crystalsCollected, totalCrystals, questionsAnswered, correctAnswers,
-  currentSubject, onStartQuestion, breakProgress, hotbar, selectedSlot, notification, crystalNotification
+  currentSubject, onStartQuestion, breakProgress, hotbar, selectedSlot, notification, crystalNotification, hasPortalKey
 }: HUDProps) {
   const subject = subjects.find(s => s.name === currentSubject);
 
@@ -112,6 +114,23 @@ export default function HUD({
         </div>
       )}
 
+      {/* Portal objective */}
+      <div className="absolute top-20 right-4 pointer-events-auto">
+        <div className="bg-gray-900/90 backdrop-blur-sm border border-purple-500/50 rounded-xl px-4 py-2">
+          <div className="text-purple-300 text-xs font-bold mb-1">🎯 Цель:</div>
+          <div className="text-white text-xs">
+            {hasPortalKey 
+              ? '🌀 Найди портал и активируй!' 
+              : `💎 ${crystalsCollected}/${totalCrystals} кристаллов`}
+          </div>
+          {!hasPortalKey && (
+            <div className="text-gray-400 text-[10px] mt-1">
+              Собери 20💎 + 5💎 для ключа
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* HOTBAR */}
       <div className="absolute bottom-4 left-1/2 -translate-x-1/2 pointer-events-auto">
         <div className="flex gap-1 bg-gray-900/80 backdrop-blur-sm border border-gray-600/50 rounded-xl p-2">
@@ -125,8 +144,8 @@ export default function HUD({
                     ? 'border-amber-400 bg-amber-900/30 scale-110 shadow-lg shadow-amber-500/30' 
                     : 'border-gray-600/50 bg-gray-800/50'}`}
               >
-                {itemData && (
-                  <span className="text-xl">{itemData.icon}</span>
+                {itemData && item && (
+                  <ItemIcon itemId={item} size={28} />
                 )}
                 <span className="absolute -top-1 -left-1 text-[10px] text-gray-400 font-bold bg-gray-900 rounded px-0.5">
                   {i + 1}

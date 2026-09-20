@@ -28,7 +28,7 @@ export default function StartScreen({ onStart }: StartScreenProps) {
         ))}
       </div>
 
-      <div className="relative text-center p-6 max-w-3xl">
+      <div className="relative text-center p-6 max-w-4xl max-h-[95vh] overflow-y-auto">
         <div className="mb-4">
           <h1 className="text-4xl md:text-6xl font-bold mb-3" style={{
             background: 'linear-gradient(to right, #FFD700, #FFA500, #FF6347)',
@@ -38,81 +38,83 @@ export default function StartScreen({ onStart }: StartScreenProps) {
             ⛏️ Кристальный Шахтёр 3D
           </h1>
           <p className="text-lg text-green-200">
-            Копай, собирай, стройся и учись!
+            Исследуй мир, собирай кристаллы, активируй портал!
           </p>
         </div>
 
         <div className="text-5xl mb-4 flex items-center justify-center gap-3">
           <span className="animate-bounce" style={{ animationDelay: '0s' }}>⛏️</span>
-          <span className="animate-bounce" style={{ animationDelay: '0.15s' }}>🪨</span>
-          <span className="animate-bounce" style={{ animationDelay: '0.3s' }}>💎</span>
-          <span className="animate-bounce" style={{ animationDelay: '0.45s' }}>🪵</span>
-          <span className="animate-bounce" style={{ animationDelay: '0.6s' }}>🏗️</span>
+          <span className="animate-bounce" style={{ animationDelay: '0.15s' }}>💎</span>
+          <span className="animate-bounce" style={{ animationDelay: '0.3s' }}>🌀</span>
+          <span className="animate-bounce" style={{ animationDelay: '0.45s' }}>🏆</span>
         </div>
 
         <div className="bg-gray-900/70 backdrop-blur-sm border border-green-500/30 rounded-2xl p-5 mb-4">
-          <p className="text-gray-200 text-base leading-relaxed mb-3">
-            Исследуй <span className="text-green-400 font-bold">огромный мир</span> с разными породами!
-            Копай вглубь, находи руды и кристаллы. Собирай материалы, создавай инструменты и строй!
-          </p>
-          
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
+          {/* Goal */}
+          <div className="bg-purple-900/30 border border-purple-500/50 rounded-xl p-4 mb-4">
+            <h3 className="text-purple-300 font-bold text-lg mb-2">🎯 Конечная цель:</h3>
+            <p className="text-gray-200 text-sm">
+              Собери <span className="text-purple-400 font-bold">20 кристаллов</span> и <span className="text-yellow-400 font-bold">5 алмазов</span>, 
+              скрафти <span className="text-pink-400 font-bold">Ключ Портала</span>, найди портал в углу карты и активируй его!
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
             <div className="bg-gray-800/50 rounded-lg p-2 text-center">
               <div className="text-2xl">⛏️</div>
               <div className="text-xs text-gray-300">Копай блоки</div>
             </div>
             <div className="bg-gray-800/50 rounded-lg p-2 text-center">
               <div className="text-2xl">💎</div>
-              <div className="text-xs text-gray-300">Найди кристаллы</div>
+              <div className="text-xs text-gray-300">Собери кристаллы</div>
             </div>
             <div className="bg-gray-800/50 rounded-lg p-2 text-center">
               <div className="text-2xl">🔨</div>
-              <div className="text-xs text-gray-300">Крафти предметы</div>
+              <div className="text-xs text-gray-300">Крафти ключ</div>
             </div>
             <div className="bg-gray-800/50 rounded-lg p-2 text-center">
-              <div className="text-2xl">🏗️</div>
-              <div className="text-xs text-gray-300">Строй миры</div>
+              <div className="text-2xl">🌀</div>
+              <div className="text-xs text-gray-300">Активируй портал</div>
             </div>
           </div>
 
-          <div className="bg-gray-800/50 rounded-lg p-3 mb-3">
-            <h3 className="text-yellow-400 font-bold text-sm mb-2">🌍 Слои мира:</h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+          {/* Biomes */}
+          <div className="bg-gray-800/50 rounded-lg p-3 mb-4">
+            <h3 className="text-yellow-400 font-bold text-sm mb-2">🌍 Биомы мира (80x80):</h3>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
               <div className="flex items-center gap-1">
                 <div className="w-4 h-4 rounded" style={{ background: '#5a9e3a' }} />
-                <span className="text-gray-300">Трава</span>
+                <span className="text-gray-300">Равнины</span>
               </div>
               <div className="flex items-center gap-1">
-                <div className="w-4 h-4 rounded" style={{ background: '#8B6914' }} />
-                <span className="text-gray-300">Земля</span>
+                <div className="w-4 h-4 rounded" style={{ background: '#2d7a2d' }} />
+                <span className="text-gray-300">Лес</span>
               </div>
               <div className="flex items-center gap-1">
-                <div className="w-4 h-4 rounded" style={{ background: '#7f7f7f' }} />
-                <span className="text-gray-300">Камень</span>
+                <div className="w-4 h-4 rounded" style={{ background: '#d4c475' }} />
+                <span className="text-gray-300">Пустыня</span>
               </div>
               <div className="flex items-center gap-1">
-                <div className="w-4 h-4 rounded" style={{ background: '#3d3d4a' }} />
-                <span className="text-gray-300">Сланец</span>
+                <div className="w-4 h-4 rounded" style={{ background: '#ffffff' }} />
+                <span className="text-gray-300">Снег</span>
               </div>
               <div className="flex items-center gap-1">
-                <div className="w-4 h-4 rounded" style={{ background: '#4a4a4a' }} />
-                <span className="text-gray-300">Уголь</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <div className="w-4 h-4 rounded" style={{ background: '#8a7060' }} />
-                <span className="text-gray-300">Железо</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <div className="w-4 h-4 rounded" style={{ background: '#9a8a50' }} />
-                <span className="text-gray-300">Золото</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <div className="w-4 h-4 rounded" style={{ background: '#5a8a8a' }} />
-                <span className="text-gray-300">Алмазы</span>
+                <div className="w-4 h-4 rounded" style={{ background: '#3498db' }} />
+                <span className="text-gray-300">Океан</span>
               </div>
             </div>
           </div>
 
+          {/* NPCs */}
+          <div className="bg-blue-900/30 border border-blue-500/30 rounded-lg p-3 mb-4">
+            <h3 className="text-blue-300 font-bold text-sm mb-2">👥 NPC в мире:</h3>
+            <p className="text-gray-300 text-xs">
+              По карте бегают NPC! Подойди к ним — они поприветствуют тебя звуком. 
+              Исследуй мир и находи ресурсы в разных биомах!
+            </p>
+          </div>
+
+          {/* Subjects */}
           <div className="grid grid-cols-5 gap-2">
             {subjects.map(s => (
               <div key={s.name} className="bg-gray-700/50 rounded-lg p-2 text-center border border-gray-600/30">
@@ -127,7 +129,7 @@ export default function StartScreen({ onStart }: StartScreenProps) {
           onClick={onStart}
           className="bg-gradient-to-r from-green-600 via-emerald-600 to-teal-600 text-white text-xl font-bold px-10 py-4 rounded-2xl shadow-2xl shadow-green-500/30 hover:shadow-green-500/50 transform hover:scale-105 active:scale-95 transition-all duration-200"
         >
-          ⛏️ Начать добычу!
+          ⛏️ Начать приключение!
         </button>
 
         <div className="mt-3 text-gray-400 text-xs">
