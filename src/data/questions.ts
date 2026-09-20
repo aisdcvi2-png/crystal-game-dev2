@@ -4,6 +4,8 @@ export interface Question {
   question: string;
   options: string[];
   correct: number;
+  difficulty?: 'easy' | 'medium' | 'hard';
+  reward?: string; // bonus item for hard questions
 }
 
 export const subjects = [
