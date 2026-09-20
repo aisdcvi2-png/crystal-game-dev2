@@ -132,16 +132,20 @@ export default function GameWorld({
           const block = worldData[x][z][y];
           if (!block) continue;
 
-          const neighbors = [
-            worldData[x+1]?.[z]?.[y],
-            worldData[x-1]?.[z]?.[y],
-            worldData[x]?.[z+1]?.[y],
-            worldData[x]?.[z-1]?.[y],
-            worldData[x]?.[z]?.[y+1],
-            worldData[x]?.[z]?.[y-1],
-          ];
+          // Check if block is exposed (has at least one empty neighbor)
+          let isExposed = false;
           
-          const isExposed = neighbors.some(n => !n) || x === 0 || x === WORLD_SIZE-1 || z === 0 || z === WORLD_SIZE-1;
+          // Check all 6 directions
+          if (!worldData[x+1]?.[z]?.[y]) isExposed = true;
+          else if (!worldData[x-1]?.[z]?.[y]) isExposed = true;
+          else if (!worldData[x]?.[z+1]?.[y]) isExposed = true;
+          else if (!worldData[x]?.[z-1]?.[y]) isExposed = true;
+          else if (!worldData[x]?.[z]?.[y+1]) isExposed = true;
+          else if (!worldData[x]?.[z]?.[y-1]) isExposed = true;
+          
+          // Also expose blocks at world boundaries
+          if (x === 0 || x === WORLD_SIZE-1 || z === 0 || z === WORLD_SIZE-1) isExposed = true;
+          if (y === 0 || y === WORLD_HEIGHT-1) isExposed = true;
           
           if (isExposed) {
             if (!blocksByType.has(block.type)) {
@@ -312,8 +316,8 @@ export default function GameWorld({
       animFrameRef.current = requestAnimationFrame(animate);
       const time = Date.now() * 0.001;
 
-      // Movement
-      const speed = 0.1;
+      // Movement - slower speed
+      const speed = 0.06;
       const direction = new THREE.Vector3();
       if (keysRef.current['KeyW'] || keysRef.current['ArrowUp']) direction.z -= 1;
       if (keysRef.current['KeyS'] || keysRef.current['ArrowDown']) direction.z += 1;
@@ -326,7 +330,7 @@ export default function GameWorld({
       velocityRef.current.x = direction.x * speed;
       velocityRef.current.z = direction.z * speed;
       if (keysRef.current['Space'] && onGroundRef.current) {
-        velocityRef.current.y = 0.16;
+        velocityRef.current.y = 0.18;
         onGroundRef.current = false;
       }
       velocityRef.current.y -= 0.007;

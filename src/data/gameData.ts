@@ -42,11 +42,11 @@ export const TOOL_DURABILITY = {
 // Block definitions
 export const BLOCK_TYPES: Record<string, BlockType> = {
   bedrock: { id: 'bedrock', name: 'Бедрок', color: 0x1a1a1a, hardness: 999, unbreakable: true },
-  stone: { id: 'stone', name: 'Камень', color: 0x7f7f7f, hardness: 4, drops: [{ item: 'cobblestone', count: 1, chance: 1 }], rareDrops: [{ item: 'crystal', count: 1, chance: 0.05 }] },
-  coal_ore: { id: 'coal_ore', name: 'Угольная руда', color: 0x4a4a4a, hardness: 4, drops: [{ item: 'coal', count: 1, chance: 1 }], rareDrops: [{ item: 'crystal', count: 1, chance: 0.08 }] },
-  iron_ore: { id: 'iron_ore', name: 'Железная руда', color: 0x8a7060, hardness: 5, drops: [{ item: 'iron_ore_item', count: 1, chance: 1 }], rareDrops: [{ item: 'crystal', count: 1, chance: 0.12 }] },
-  gold_ore: { id: 'gold_ore', name: 'Золотая руда', color: 0x9a8a50, hardness: 5, drops: [{ item: 'gold_ore_item', count: 1, chance: 1 }], rareDrops: [{ item: 'crystal', count: 1, chance: 0.15 }] },
-  diamond_ore: { id: 'diamond_ore', name: 'Алмазная руда', color: 0x5a8a8a, hardness: 6, drops: [{ item: 'diamond', count: 1, chance: 1 }], rareDrops: [{ item: 'crystal', count: 1, chance: 0.25 }] },
+  stone: { id: 'stone', name: 'Камень', color: 0x7f7f7f, hardness: 4, drops: [{ item: 'cobblestone', count: 1, chance: 1 }], rareDrops: [{ item: 'crystal', count: 1, chance: 0.15 }] },
+  coal_ore: { id: 'coal_ore', name: 'Угольная руда', color: 0x4a4a4a, hardness: 4, drops: [{ item: 'coal', count: 1, chance: 1 }], rareDrops: [{ item: 'crystal', count: 1, chance: 0.25 }] },
+  iron_ore: { id: 'iron_ore', name: 'Железная руда', color: 0x8a7060, hardness: 5, drops: [{ item: 'iron_ore_item', count: 1, chance: 1 }], rareDrops: [{ item: 'crystal', count: 1, chance: 0.35 }] },
+  gold_ore: { id: 'gold_ore', name: 'Золотая руда', color: 0x9a8a50, hardness: 5, drops: [{ item: 'gold_ore_item', count: 1, chance: 1 }], rareDrops: [{ item: 'crystal', count: 1, chance: 0.45 }] },
+  diamond_ore: { id: 'diamond_ore', name: 'Алмазная руда', color: 0x5a8a8a, hardness: 6, drops: [{ item: 'diamond', count: 1, chance: 1 }], rareDrops: [{ item: 'crystal', count: 1, chance: 0.60 }] },
   dirt: { id: 'dirt', name: 'Земля', color: 0x8B6914, hardness: 2, drops: [{ item: 'dirt_block', count: 1, chance: 1 }] },
   grass: { id: 'grass', name: 'Трава', color: 0x5a9e3a, hardness: 2, drops: [{ item: 'dirt_block', count: 1, chance: 1 }], rareDrops: [{ item: 'seeds', count: 1, chance: 0.2 }] },
   sand: { id: 'sand', name: 'Песок', color: 0xd4c475, hardness: 1, drops: [{ item: 'sand_block', count: 1, chance: 1 }] },
@@ -93,7 +93,7 @@ export const CRAFT_RECIPES: CraftRecipe[] = [
 
 // World generation
 export const WORLD_SIZE = 64;
-export const WORLD_HEIGHT = 10;
+export const WORLD_HEIGHT = 16;
 
 export interface WorldBlock {
   type: string;
@@ -156,10 +156,10 @@ export function generateWorld(seed?: number): WorldBlock[][][] {
     for (let z = 0; z < WORLD_SIZE; z++) {
       world[x][z] = [];
       
-      // Smoother terrain with multiple noise layers
-      const baseHeight = fbm(x * 0.03, z * 0.03, worldSeed, 4);
-      const detail = fbm(x * 0.08, z * 0.08, worldSeed + 100, 3);
-      const height = Math.floor(3 + baseHeight * 4 + detail * 1.5);
+      // Higher terrain with more variation
+      const baseHeight = fbm(x * 0.02, z * 0.02, worldSeed, 4);
+      const detail = fbm(x * 0.06, z * 0.06, worldSeed + 100, 3);
+      const height = Math.floor(5 + baseHeight * 6 + detail * 2);
 
       for (let y = 0; y < WORLD_HEIGHT; y++) {
         let type = '';
@@ -168,10 +168,10 @@ export function generateWorld(seed?: number): WorldBlock[][][] {
           type = 'bedrock';
         } else if (y < height - 2) {
           const oreChance = noise(x * 2 + y, z * 3 + y, worldSeed + y * 5);
-          if (oreChance > 0.92) type = 'diamond_ore';
-          else if (oreChance > 0.85) type = 'gold_ore';
-          else if (oreChance > 0.75) type = 'iron_ore';
-          else if (oreChance > 0.65) type = 'coal_ore';
+          if (oreChance > 0.88) type = 'diamond_ore';
+          else if (oreChance > 0.78) type = 'gold_ore';
+          else if (oreChance > 0.65) type = 'iron_ore';
+          else if (oreChance > 0.50) type = 'coal_ore';
           else type = 'stone';
         } else if (y < height) {
           type = 'dirt';
@@ -193,46 +193,41 @@ export function generateWorld(seed?: number): WorldBlock[][][] {
     }
   }
 
-  // Add trees with better generation
-  const treeCount = 40;
-  for (let i = 0; i < treeCount; i++) {
-    const tx = Math.floor(Math.random() * (WORLD_SIZE - 6)) + 3;
-    const tz = Math.floor(Math.random() * (WORLD_SIZE - 6)) + 3;
-    
-    let surfaceY = -1;
-    for (let y = WORLD_HEIGHT - 1; y >= 0; y--) {
-      if (world[tx][tz][y] && world[tx][tz][y].type === 'grass') {
-        surfaceY = y;
-        break;
+  // Add many trees with guaranteed generation
+  for (let tx = 3; tx < WORLD_SIZE - 3; tx += 4) {
+    for (let tz = 3; tz < WORLD_SIZE - 3; tz += 4) {
+      // Random chance to place tree
+      if (Math.random() > 0.6) continue;
+      
+      let surfaceY = -1;
+      for (let y = WORLD_HEIGHT - 1; y >= 0; y--) {
+        if (world[tx]?.[tz]?.[y] && world[tx][tz][y].type === 'grass') {
+          surfaceY = y;
+          break;
+        }
       }
-    }
 
-    if (surfaceY >= 0 && surfaceY + 7 < WORLD_HEIGHT) {
-      const treeHeight = 4 + Math.floor(Math.random() * 2);
-      
-      // Trunk
-      for (let h = 1; h <= treeHeight; h++) {
-        world[tx][tz][surfaceY + h] = { type: 'oak_log', health: 3, maxHealth: 3 };
-      }
-      
-      // Leaves - more natural shape
-      const leafStart = treeHeight - 2;
-      const leafEnd = treeHeight + 2;
-      
-      for (let ly = leafStart; ly <= leafEnd; ly++) {
-        const radius = ly === leafEnd ? 1 : (ly === leafStart ? 2 : 2);
-        for (let lx = -radius; lx <= radius; lx++) {
-          for (let lz = -radius; lz <= radius; lz++) {
-            const nx = tx + lx;
-            const nz = tz + lz;
-            
-            // Skip corners for rounder shape
-            if (Math.abs(lx) === radius && Math.abs(lz) === radius && Math.random() > 0.5) continue;
-            
-            if (nx >= 0 && nx < WORLD_SIZE && nz >= 0 && nz < WORLD_SIZE) {
-              if (!world[nx][nz][surfaceY + ly]) {
-                if (!(lx === 0 && lz === 0 && ly <= treeHeight)) {
-                  world[nx][nz][surfaceY + ly] = { type: 'oak_leaves', health: 1, maxHealth: 1 };
+      if (surfaceY >= 0 && surfaceY + 8 < WORLD_HEIGHT) {
+        const treeHeight = 5 + Math.floor(Math.random() * 2);
+        
+        // Trunk
+        for (let h = 1; h <= treeHeight; h++) {
+          world[tx][tz][surfaceY + h] = { type: 'oak_log', health: 3, maxHealth: 3 };
+        }
+        
+        // Leaves - big round crown
+        for (let ly = treeHeight - 1; ly <= treeHeight + 2; ly++) {
+          const radius = ly >= treeHeight + 1 ? 1 : 2;
+          for (let lx = -radius; lx <= radius; lx++) {
+            for (let lz = -radius; lz <= radius; lz++) {
+              const nx = tx + lx;
+              const nz = tz + lz;
+              
+              if (nx >= 0 && nx < WORLD_SIZE && nz >= 0 && nz < WORLD_SIZE) {
+                if (!world[nx][nz][surfaceY + ly]) {
+                  if (!(lx === 0 && lz === 0 && ly <= treeHeight)) {
+                    world[nx][nz][surfaceY + ly] = { type: 'oak_leaves', health: 1, maxHealth: 1 };
+                  }
                 }
               }
             }
