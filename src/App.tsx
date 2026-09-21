@@ -294,6 +294,12 @@ function App() {
   }, [showNotif]);
 
   const removeItem = useCallback((itemId: string, count: number = 1): boolean => {
+    // Verify we actually have enough of this item before removing anything
+    const totalAvailable =
+      hotbarRef.current.filter(item => item === itemId).length +
+      inventoryRef.current.filter(item => item === itemId).length;
+    if (totalAvailable < count) return false;
+
     // Remove from inventory
     setInventory(prev => {
       const newInv = [...prev];
@@ -370,11 +376,6 @@ function App() {
       const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
       return distance <= crystalRadius && !cp.collected;
     });
-    
-    // Debug log
-    if (nearbyCrystal) {
-      console.log('Crystal found nearby!', nearbyCrystal);
-    }
     
     if (nearbyCrystal && availableCrystals.length > 0) {
       const crystalId = nearbyCrystal.id;
@@ -492,8 +493,6 @@ function App() {
       positions.push({ id: i, x, y, z, collected: false });
     }
     
-    console.log('Generated crystal positions:', positions);
-    
     setCrystalPositions(positions);
     setGameState('playing');
     setCurrentSubject(subjects[0].name);
@@ -586,7 +585,6 @@ function App() {
 
   // Open workbench - basic 2x2 always available, advanced 3x3 requires advanced workbench
   const openWorkbench = useCallback(() => {
-    console.log('openWorkbench called');
     // Basic workbench (2x2) is always available
     setShowWorkbench(true);
     if (document.pointerLockElement) document.exitPointerLock();
@@ -645,7 +643,7 @@ function App() {
     
     setDroppedItems(prev => [...prev, newItem]);
     
-    showNotif(`📦 Выброшено: ${ITEM_TYPES[droppedItemId].name}`);
+    showNotif(`📦 Выброшено: ${ITEM_TYPES[droppedItemId]?.name ?? droppedItemId}`);
   }, [hotbar, selectedSlot, showNotif, playerPosition]);
 
   // Pickup dropped item
@@ -916,7 +914,7 @@ function App() {
               <div className="mt-2 text-center">
                 <div className="bg-gray-900/80 backdrop-blur-sm border border-gray-600/50 rounded-lg px-3 py-1 inline-block">
                   {hotbar[selectedSlot] ? (
-                    <span className="text-amber-400 text-xs font-bold">⛏️ {ITEM_TYPES[hotbar[selectedSlot]!].name}</span>
+                    <span className="text-amber-400 text-xs font-bold">⛏️ {ITEM_TYPES[hotbar[selectedSlot]!]?.name ?? hotbar[selectedSlot]}</span>
                   ) : (
                     <span className="text-gray-400 text-xs">✋ Рука</span>
                   )}
