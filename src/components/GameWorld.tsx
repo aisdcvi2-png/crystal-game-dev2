@@ -15,11 +15,13 @@ interface GameWorldProps {
   droppedCrystals: { id: number; x: number; y: number; z: number; baseY: number; hitCount: number }[];
   onPortalActivated: () => void;
   hasPortalKey: boolean;
+  droppedItems: { id: string; itemId: string; x: number; y: number; z: number; burnoutTime?: number }[];
+  onPickupItem: (itemId: string) => void;
 }
 
 export default function GameWorld({
   onCrystalFound, playerPosition, availableCrystals, onBlockMined,
-  selectedSlot, hotbar, onPlaceBlock, onCrystalPickup, onCrystalHit, droppedCrystals, onPortalActivated, hasPortalKey
+  selectedSlot, hotbar, onPlaceBlock, onCrystalPickup, onCrystalHit, droppedCrystals, onPortalActivated, hasPortalKey, droppedItems, onPickupItem
 }: GameWorldProps) {
   const mountRef = useRef<HTMLDivElement>(null);
   const keysRef = useRef<{ [key: string]: boolean }>({});
@@ -53,6 +55,9 @@ export default function GameWorld({
   const blockGeoRef = useRef<THREE.BoxGeometry | null>(null);
   const torchLightsRef = useRef<Map<string, THREE.PointLight>>(new Map());
   const plantedSeedsRef = useRef<Map<string, { x: number; y: number; z: number; plantTime: number }>>(new Map());
+  const droppedItemsRef = useRef(droppedItems);
+  const onPickupItemRef = useRef(onPickupItem);
+  const droppedItemMeshesRef = useRef<Map<string, THREE.Group>>(new Map());
 
   useEffect(() => { hotbarRef.current = hotbar; }, [hotbar]);
   useEffect(() => { selectedSlotRef.current = selectedSlot; }, [selectedSlot]);
@@ -62,6 +67,8 @@ export default function GameWorld({
   useEffect(() => { droppedCrystalsRef.current = droppedCrystals; }, [droppedCrystals]);
   useEffect(() => { hasPortalKeyRef.current = hasPortalKey; }, [hasPortalKey]);
   useEffect(() => { onPortalActivatedRef.current = onPortalActivated; }, [onPortalActivated]);
+  useEffect(() => { droppedItemsRef.current = droppedItems; }, [droppedItems]);
+  useEffect(() => { onPickupItemRef.current = onPickupItem; }, [onPickupItem]);
 
   const getBlockKey = (x: number, y: number, z: number) => `${x},${y},${z}`;
 
@@ -810,12 +817,17 @@ export default function GameWorld({
         }
       }
 
-      // Place block
+      // Place block - only crafted materials allowed
       if (mouseRef.current.rightDown && mouseRef.current.locked && placeCooldownRef.current <= 0) {
         const selectedItem = hotbarRef.current[selectedSlotRef.current];
         if (selectedItem) {
           const itemData = ITEM_TYPES[selectedItem];
-          if (itemData?.placeable && itemData.blockId) {
+          
+          // Check if item is a crafted material (not raw)
+          const rawMaterials = ['oak_log_item', 'iron_ore_item', 'gold_ore_item', 'cobblestone'];
+          const isRawMaterial = rawMaterials.includes(selectedItem);
+          
+          if (itemData?.placeable && itemData.blockId && !isRawMaterial) {
             const ray = raycasterRef.current.ray;
             const maxDist = 5;
             const step = 0.2;
@@ -926,6 +938,65 @@ export default function GameWorld({
         if (crystal.hitCount > 0) {
           const pulseScale = 1 + Math.sin(time * 8) * 0.1 * crystal.hitCount;
           group.scale.setScalar(pulseScale);
+        }
+      });
+
+      // Dropped items visualization and pickup
+      droppedItemsRef.current.forEach(item => {
+        let itemMesh = droppedItemMeshesRef.current.get(item.id);
+        
+        // Create mesh if doesn't exist
+        if (!itemMesh) {
+          const group = new THREE.Group();
+          
+          // Create item representation based on type
+          const itemGeo = new THREE.BoxGeometry(0.3, 0.3, 0.3);
+          let itemColor = 0x888888;
+          
+          if (item.itemId.includes('pickaxe')) {
+            itemColor = item.itemId === 'wood_pickaxe' ? 0xD2691E : 
+                       item.itemId === 'stone_pickaxe' ? 0x808080 :
+                       item.itemId === 'iron_pickaxe' ? 0xC0C0C0 : 0x4DD0E1;
+          } else if (item.itemId === 'stick') {
+            itemColor = 0x8B4513;
+          } else if (item.itemId === 'torch') {
+            itemColor = 0xFFA500;
+            // Add light for torch
+            const torchLight = new THREE.PointLight(0xFFA500, 1, 8);
+            group.add(torchLight);
+          } else if (item.itemId === 'coal') {
+            itemColor = 0x2C2C2C;
+          } else if (item.itemId === 'diamond') {
+            itemColor = 0x4DD0E1;
+          }
+          
+          const itemMat = new THREE.MeshLambertMaterial({ color: itemColor });
+          const itemMeshObj = new THREE.Mesh(itemGeo, itemMat);
+          group.add(itemMeshObj);
+          
+          group.position.set(item.x + 0.5, item.y + 0.5, item.z + 0.5);
+          scene.add(group);
+          droppedItemMeshesRef.current.set(item.id, group);
+          itemMesh = group;
+        }
+        
+        // Animate item (floating and rotating)
+        itemMesh.rotation.y += 0.02;
+        itemMesh.position.y = item.y + 0.5 + Math.sin(time * 2 + itemMesh.id) * 0.1;
+        
+        // Check if torch burned out
+        if (item.itemId === 'torch' && item.burnoutTime && Date.now() > item.burnoutTime) {
+          scene.remove(itemMesh);
+          droppedItemMeshesRef.current.delete(item.id);
+          return;
+        }
+        
+        // Check if player is near - pickup
+        const dist = camera.position.distanceTo(itemMesh.position);
+        if (dist < 2) {
+          onPickupItemRef.current(item.itemId);
+          scene.remove(itemMesh);
+          droppedItemMeshesRef.current.delete(item.id);
         }
       });
 

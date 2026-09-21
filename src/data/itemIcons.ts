@@ -270,6 +270,26 @@ export const getItemIcon = (itemId: string): string => {
       <line x1="15" y1="4" x2="15" y2="28" stroke="#654321" stroke-width="1"/>
     </svg>`,
     
+    advanced_workbench: `<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="advWoodGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style="stop-color:#8B4513;stop-opacity:1" />
+          <stop offset="100%" style="stop-color:#654321;stop-opacity:1" />
+        </linearGradient>
+      </defs>
+      <rect x="4" y="4" width="24" height="24" fill="url(#advWoodGrad)" stroke="#4A2E1A" stroke-width="1.5" rx="1"/>
+      <rect x="6" y="6" width="6" height="6" fill="#A0522D" stroke="#4A2E1A" stroke-width="0.5"/>
+      <rect x="13" y="6" width="6" height="6" fill="#CD853F" stroke="#4A2E1A" stroke-width="0.5"/>
+      <rect x="20" y="6" width="6" height="6" fill="#A0522D" stroke="#4A2E1A" stroke-width="0.5"/>
+      <rect x="6" y="13" width="6" height="6" fill="#CD853F" stroke="#4A2E1A" stroke-width="0.5"/>
+      <rect x="13" y="13" width="6" height="6" fill="#8B4513" stroke="#4A2E1A" stroke-width="0.5"/>
+      <rect x="20" y="13" width="6" height="6" fill="#CD853F" stroke="#4A2E1A" stroke-width="0.5"/>
+      <rect x="6" y="20" width="6" height="6" fill="#A0522D" stroke="#4A2E1A" stroke-width="0.5"/>
+      <rect x="13" y="20" width="6" height="6" fill="#CD853F" stroke="#4A2E1A" stroke-width="0.5"/>
+      <rect x="20" y="20" width="6" height="6" fill="#A0522D" stroke="#4A2E1A" stroke-width="0.5"/>
+      <circle cx="16" cy="16" r="2" fill="#FFD700" opacity="0.8"/>
+    </svg>`,
+    
     furnace: `<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
       <rect x="4" y="4" width="24" height="24" fill="#808080" stroke="#606060" stroke-width="1"/>
       <rect x="10" y="14" width="12" height="10" fill="#2C2C2C"/>

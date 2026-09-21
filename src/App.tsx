@@ -206,6 +206,7 @@ function App() {
   const [showCrystalChoice, setShowCrystalChoice] = useState(false);
   const [crystalTimer, setCrystalTimer] = useState<number | null>(null);
   const [pendingCrystal, setPendingCrystal] = useState<number | null>(null);
+  const [droppedItems, setDroppedItems] = useState<Array<{id: string, itemId: string, x: number, y: number, z: number, burnoutTime?: number}>>([]);
   const [craftingGrid, setCraftingGrid] = useState<(string | null)[]>(Array(9).fill(null));
   const [craftResult, setCraftResult] = useState<string | null>(null);
 
@@ -573,19 +574,13 @@ function App() {
     showNotif(`🔨 Создано: ${recipe?.name || resultItem} x${count}`);
   }, [showNotif]);
 
-  // Open workbench if player has one
+  // Open workbench - basic 2x2 always available, advanced 3x3 requires advanced workbench
   const openWorkbench = useCallback(() => {
     console.log('openWorkbench called');
-    const workbenchCount = hotbarRef.current.filter(item => item === 'crafting_table').length +
-                          inventoryRef.current.filter(item => item === 'crafting_table').length;
-    console.log('workbenchCount:', workbenchCount);
-    if (workbenchCount === 0) {
-      showNotif('⚠️ Нужен верстак!');
-      return;
-    }
+    // Basic workbench (2x2) is always available
     setShowWorkbench(true);
     if (document.pointerLockElement) document.exitPointerLock();
-  }, [showNotif]);
+  }, []);
 
   const handlePortalActivated = useCallback(() => {
     if (!portalActivated && countItem('portal_key') > 0) {
@@ -606,19 +601,51 @@ function App() {
     setCrystalPositions([]);
   };
 
-  // Drop item from hotbar
+  // Drop item from hotbar - item stays on ground
   const handleDropItem = useCallback(() => {
     const itemId = hotbar[selectedSlot];
     if (!itemId) return;
     
+    // Remove from hotbar
     setHotbar(prev => {
       const newHotbar = [...prev];
       newHotbar[selectedSlot] = null;
       return newHotbar;
     });
     
-    showNotif(`🗑️ Выброшено: ${ITEM_TYPES[itemId].name}`);
-  }, [hotbar, selectedSlot, showNotif]);
+    // Add to dropped items at player position
+    const playerPos = playerPosition.current;
+    const dropX = Math.floor(playerPos.x);
+    const dropY = Math.floor(playerPos.y) - 1;
+    const dropZ = Math.floor(playerPos.z);
+    
+    const newItem: any = {
+      id: `${Date.now()}-${Math.random()}`,
+      itemId: itemId,
+      x: dropX,
+      y: dropY,
+      z: dropZ
+    };
+    
+    // If it's a torch, add burnout time (60 seconds)
+    if (itemId === 'torch') {
+      newItem.burnoutTime = Date.now() + 60000;
+    }
+    
+    setDroppedItems(prev => [...prev, newItem]);
+    
+    showNotif(`📦 Выброшено: ${ITEM_TYPES[itemId].name}`);
+  }, [hotbar, selectedSlot, showNotif, playerPosition]);
+
+  // Pickup dropped item
+  const handlePickupItem = useCallback((itemId: string) => {
+    // Remove from dropped items
+    setDroppedItems(prev => prev.filter(item => item.itemId !== itemId));
+    
+    // Add to inventory
+    addItem(itemId, 1);
+    showNotif(`✨ Подобрано: ${ITEM_TYPES[itemId]?.name || itemId}`);
+  }, [addItem, showNotif]);
 
   // Keyboard handler
   useEffect(() => {
@@ -791,6 +818,8 @@ function App() {
             droppedCrystals={droppedCrystals}
             onPortalActivated={handlePortalActivated}
             hasPortalKey={countItem('portal_key') > 0}
+            droppedItems={droppedItems}
+            onPickupItem={handlePickupItem}
           />
 
           {/* HUD */}
@@ -984,135 +1013,32 @@ function App() {
                 <div>
                   <h3 className="text-amber-400 font-bold mb-2 text-sm">🔨 Крафт</h3>
                   
-                  {/* Check if player has workbench */}
-                  {(() => {
-                    const hasWorkbench = hotbarRef.current.filter(item => item === 'crafting_table').length +
-                                        inventoryRef.current.filter(item => item === 'crafting_table').length > 0;
-                    const planksCount = hotbarRef.current.filter(item => item === 'planks_block').length +
-                                       inventoryRef.current.filter(item => item === 'planks_block').length;
-                    const canCraftWorkbench = planksCount >= 4;
-                    
-                    if (hasWorkbench) {
-                      // Has workbench - show workbench button
-                      return (
-                        <>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openWorkbench();
-                            }}
-                            className="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 px-4 rounded-lg transition-colors mb-3 pointer-events-auto"
-                          >
-                            🔨 Открыть верстак
-                          </button>
-                          
-                          {/* Recipe book */}
-                          <div className="bg-gray-800/50 rounded-lg p-3 mb-3">
-                            <h4 className="text-gray-300 font-bold mb-2 text-xs">📖 Рецепты (для справки)</h4>
-                            <div className="grid grid-cols-1 gap-1 max-h-40 overflow-y-auto">
-                              {CRAFT_RECIPES.filter(r => !r.requiresWorkbench).map(recipe => (
-                                <div key={recipe.id} className="flex items-center gap-2 text-xs text-gray-400">
-                                  <ItemIcon itemId={recipe.result.item} size={16} />
-                                  <span className="truncate">{recipe.name}: {recipe.description}</span>
-                                </div>
-                              ))}
-                            </div>
-                            <p className="text-gray-500 text-[10px] mt-2">
-                              💡 Для сложных рецептов нужен верстак
-                            </p>
-                          </div>
-                        </>
-                      );
-                    } else if (canCraftWorkbench) {
-                      // No workbench but has planks - show craft workbench button
-                      return (
-                        <>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              
-                              // Remove 4 planks
-                              let planksToRemove = 4;
-                              
-                              // First remove from inventory
-                              setInventory(prev => {
-                                const newInv = [...prev];
-                                for (let i = 0; i < 27 && planksToRemove > 0; i++) {
-                                  if (newInv[i] === 'planks_block') {
-                                    newInv[i] = null;
-                                    planksToRemove--;
-                                  }
-                                }
-                                return newInv;
-                              });
-                              
-                              // Then remove from hotbar if needed
-                              if (planksToRemove > 0) {
-                                setHotbar(prev => {
-                                  const newHotbar = [...prev];
-                                  for (let i = 0; i < 9 && planksToRemove > 0; i++) {
-                                    if (newHotbar[i] === 'planks_block') {
-                                      newHotbar[i] = null;
-                                      planksToRemove--;
-                                    }
-                                  }
-                                  return newHotbar;
-                                });
-                              }
-                              
-                              // Add workbench to inventory
-                              setTimeout(() => {
-                                setInventory(prev => {
-                                  const newInv = [...prev];
-                                  for (let i = 0; i < 27; i++) {
-                                    if (!newInv[i]) {
-                                      newInv[i] = 'crafting_table';
-                                      return newInv;
-                                    }
-                                  }
-                                  // If inventory is full, add to hotbar
-                                  setHotbar(prevHotbar => {
-                                    const newHotbar = [...prevHotbar];
-                                    for (let i = 0; i < 9; i++) {
-                                      if (!newHotbar[i]) {
-                                        newHotbar[i] = 'crafting_table';
-                                        return newHotbar;
-                                      }
-                                    }
-                                    return prevHotbar;
-                                  });
-                                  return prev;
-                                });
-                              }, 0);
-                              
-                              showNotif('🔨 Верстак создан!');
-                            }}
-                            className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg transition-colors mb-3 pointer-events-auto"
-                          >
-                            🔨 Собрать верстак (4 доски)
-                          </button>
-                          
-                          <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-3 mb-3">
-                            <p className="text-blue-300 text-xs">
-                              💡 Соберите верстак для доступа к сложным рецептам
-                            </p>
-                          </div>
-                        </>
-                      );
-                    } else {
-                      // No workbench and no planks - show hint
-                      return (
-                        <div className="bg-gray-800/50 rounded-lg p-3 mb-3">
-                          <p className="text-gray-400 text-xs mb-2">
-                            🔨 Нужен верстак для крафта
-                          </p>
-                          <p className="text-gray-500 text-[10px]">
-                            💡 Соберите 4 доски чтобы создать верстак
-                          </p>
+                  {/* Workbench button - always available (basic 2x2) */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openWorkbench();
+                    }}
+                    className="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 px-4 rounded-lg transition-colors mb-3 pointer-events-auto"
+                  >
+                    🔨 Открыть верстак
+                  </button>
+                  
+                  {/* Recipe book */}
+                  <div className="bg-gray-800/50 rounded-lg p-3 mb-3">
+                    <h4 className="text-gray-300 font-bold mb-2 text-xs">📖 Рецепты (для справки)</h4>
+                    <div className="grid grid-cols-1 gap-1 max-h-40 overflow-y-auto">
+                      {CRAFT_RECIPES.filter(r => !r.requiresAdvancedWorkbench).map(recipe => (
+                        <div key={recipe.id} className="flex items-center gap-2 text-xs text-gray-400">
+                          <ItemIcon itemId={recipe.result.item} size={16} />
+                          <span className="truncate">{recipe.name}: {recipe.description}</span>
                         </div>
-                      );
-                    }
-                  })()}
+                      ))}
+                    </div>
+                    <p className="text-gray-500 text-[10px] mt-2">
+                      💡 Базовый верстак 2x2 всегда доступен. Для сложных рецептов нужен верстак 3x3.
+                    </p>
+                  </div>
                 </div>
 
                 <div className="mt-4 pt-3 border-t border-gray-700 text-center text-gray-500 text-xs">

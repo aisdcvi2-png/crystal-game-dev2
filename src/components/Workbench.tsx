@@ -13,27 +13,33 @@ export default function Workbench({ inventory, setInventory, onCraft, onClose }:
   const [craftGrid, setCraftGrid] = useState<(string | null)[]>(Array(9).fill(null));
   const [dragItem, setDragItem] = useState<{ item: string; from: 'inventory' | 'grid'; index: number } | null>(null);
 
+  // Check if player has advanced workbench
+  const hasAdvancedWorkbench = inventory.filter(item => item === 'advanced_workbench').length > 0;
+  
   // Check if current grid matches any recipe
   const checkRecipe = () => {
     for (const recipe of CRAFT_RECIPES) {
-      if (recipe.requiresWorkbench) {
-        // Create pattern from ingredients
-        const pattern = Array(9).fill(null);
-        let patternIndex = 0;
-        
-        for (const ing of recipe.ingredients) {
-          for (let i = 0; i < ing.count; i++) {
-            if (patternIndex < 9) {
-              pattern[patternIndex] = ing.item;
-              patternIndex++;
-            }
+      // Skip recipes that require advanced workbench if player doesn't have one
+      if (recipe.requiresAdvancedWorkbench && !hasAdvancedWorkbench) {
+        continue;
+      }
+      
+      // Create pattern from ingredients
+      const pattern = Array(9).fill(null);
+      let patternIndex = 0;
+      
+      for (const ing of recipe.ingredients) {
+        for (let i = 0; i < ing.count; i++) {
+          if (patternIndex < 9) {
+            pattern[patternIndex] = ing.item;
+            patternIndex++;
           }
         }
-        
-        // Check if grid matches pattern (allowing rotation/mirroring)
-        if (matchesPattern(craftGrid, pattern)) {
-          return recipe;
-        }
+      }
+      
+      // Check if grid matches pattern (allowing rotation/mirroring)
+      if (matchesPattern(craftGrid, pattern)) {
+        return recipe;
       }
     }
     return null;
@@ -153,7 +159,12 @@ export default function Workbench({ inventory, setInventory, onCraft, onClose }:
     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.85)' }}>
       <div className="bg-gray-900 border-2 border-amber-600 rounded-2xl p-6 max-w-4xl w-full mx-4">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-2xl font-bold text-white">🔨 Верстак</h2>
+          <div>
+            <h2 className="text-2xl font-bold text-white">🔨 Верстак 3x3</h2>
+            {!hasAdvancedWorkbench && (
+              <p className="text-yellow-400 text-xs mt-1">⚠️ Базовый режим (2x2). Создайте верстак 3x3 для всех рецептов!</p>
+            )}
+          </div>
           <button onClick={onClose} className="text-gray-400 hover:text-white text-2xl font-bold px-3 py-1 rounded-lg hover:bg-gray-700">✕</button>
         </div>
 
