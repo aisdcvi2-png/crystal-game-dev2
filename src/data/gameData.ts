@@ -83,6 +83,9 @@ export const BLOCK_TYPES: Record<string, BlockType> = {
   chest: { id: 'chest', name: 'Сундук', color: 0x8B4513, hardness: 4, drops: [{ item: 'chest', count: 1, chance: 1 }] },
   ladder: { id: 'ladder', name: 'Лестница', color: 0xA0522D, hardness: 2, drops: [{ item: 'ladder', count: 1, chance: 1 }], climbable: true },
   glass: { id: 'glass', name: 'Стекло', color: 0xADD8E6, hardness: 1, drops: [], transparent: true },
+  planks: { id: 'planks', name: 'Доски', color: 0xC19A6B, hardness: 5, drops: [{ item: 'planks_block', count: 1, chance: 1 }] },
+  brick_block: { id: 'brick_block', name: 'Кирпичная кладка', color: 0xB22222, hardness: 6, drops: [{ item: 'brick_block_item', count: 1, chance: 1 }] },
+  glass_block: { id: 'glass_block', name: 'Стеклянный блок', color: 0xADD8E6, hardness: 2, drops: [], transparent: true },
 };
 
 // Item definitions
@@ -116,6 +119,10 @@ export const ITEM_TYPES: Record<string, ItemType> = {
   
   dirt_block: { id: 'dirt_block', name: 'Земля', description: 'Поставь землю', category: 'block', stackSize: 64, placeable: true, blockId: 'dirt' },
   sand_block: { id: 'sand_block', name: 'Песок', description: 'Поставь песок', category: 'block', stackSize: 64, placeable: true, blockId: 'sand' },
+
+  planks_block: { id: 'planks_block', name: 'Доска', description: 'Деревянная доска для крафта и стройки', category: 'block', stackSize: 64, placeable: true, blockId: 'planks' },
+  brick_block_item: { id: 'brick_block_item', name: 'Кирпич', description: 'Прочный строительный блок', category: 'block', stackSize: 64, placeable: true, blockId: 'brick_block' },
+  glass_block_item: { id: 'glass_block_item', name: 'Стеклянный блок', description: 'Прозрачный прочный блок', category: 'block', stackSize: 64, placeable: true, blockId: 'glass_block', transparent: true },
 };
 
 // Crafting recipes - Minecraft style
