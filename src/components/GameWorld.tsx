@@ -481,7 +481,7 @@ export default function GameWorld({
       for (let i = 0; i < particleCount; i++) {
         const size = 0.08 + Math.random() * 0.08;
         const geo = new THREE.BoxGeometry(size, size, size);
-        const mat = new THREE.MeshLambertMaterial({ color: BLOCK_TYPES[block.type].color, transparent: true, opacity: 1 });
+        const mat = new THREE.MeshLambertMaterial({ color: BLOCK_TYPES[block.type]?.color ?? 0x808080, transparent: true, opacity: 1 });
         const particle = new THREE.Mesh(geo, mat);
         particle.position.set(x + 0.5 + (Math.random() - 0.5) * 0.5, y + 0.5 + (Math.random() - 0.5) * 0.5, z + 0.5 + (Math.random() - 0.5) * 0.5);
         scene.add(particle);
