@@ -639,14 +639,18 @@ function App() {
   }, [hotbar, selectedSlot, showNotif, playerPosition]);
 
   // Pickup dropped item
-  const handlePickupItem = useCallback((itemId: string) => {
-    // Remove from dropped items
-    setDroppedItems(prev => prev.filter(item => item.itemId !== itemId));
+  const handlePickupItem = useCallback((droppedItemId: string) => {
+    // Find the specific dropped item
+    const droppedItem = droppedItems.find(item => item.id === droppedItemId);
+    if (!droppedItem) return;
+    
+    // Remove only this specific item from dropped items
+    setDroppedItems(prev => prev.filter(item => item.id !== droppedItemId));
     
     // Add to inventory
-    addItem(itemId, 1);
-    showNotif(`✨ Подобрано: ${ITEM_TYPES[itemId]?.name || itemId}`);
-  }, [addItem, showNotif]);
+    addItem(droppedItem.itemId, 1);
+    showNotif(`✨ Подобрано: ${ITEM_TYPES[droppedItem.itemId]?.name || droppedItem.itemId}`);
+  }, [addItem, showNotif, droppedItems]);
 
   // Keyboard handler
   useEffect(() => {
@@ -1031,8 +1035,8 @@ function App() {
                     <div className="space-y-2 text-xs">
                       <div className="bg-gray-700/30 rounded p-2">
                         <div className="text-amber-400 font-bold mb-1">🪵 Базовые (2x2):</div>
-                        <div className="text-gray-300">• 1 бревно → 4 доски</div>
-                        <div className="text-gray-300">• 2 доски → 4 палки</div>
+                        <div className="text-gray-300">• 2 дерева + 2 палки → 1 доска</div>
+                        <div className="text-gray-300">• 4 бревна → 1 палка</div>
                       </div>
                       <div className="bg-gray-700/30 rounded p-2">
                         <div className="text-green-400 font-bold mb-1">🔨 Продвинутые (3x3):</div>

@@ -11,6 +11,7 @@ interface WorkbenchProps {
 
 export default function Workbench({ inventory, setInventory, onCraft, onClose }: WorkbenchProps) {
   const [craftGrid, setCraftGrid] = useState<(string | null)[]>(Array(9).fill(null));
+  const [gridItems, setGridItems] = useState<{item: string, invIndex: number, gridIndex: number}[]>([]); // Track which inventory items are in grid
   const [dragItem, setDragItem] = useState<{ item: string; from: 'inventory' | 'grid'; index: number } | null>(null);
 
   // Check if player has advanced workbench
@@ -84,14 +85,24 @@ export default function Workbench({ inventory, setInventory, onCraft, onClose }:
         newInv[index] = dragItem.item;
         setInventory(newInv);
       } else {
-        // Move from grid to inventory
+        // Move from grid to inventory - item returns to original inventory slot
         const newGrid = [...craftGrid];
-        newGrid[dragItem.index] = item; // item can be null if inventory slot was empty
+        newGrid[dragItem.index] = null; // Clear grid slot
         setCraftGrid(newGrid);
         
-        const newInv = [...inventory];
-        newInv[index] = dragItem.item;
-        setInventory(newInv);
+        // Find the grid item data to get the original inventory index
+        const gridItemData = gridItems.find(g => g.gridIndex === dragItem.index);
+        
+        // Remove from gridItems tracking
+        const newGridItems = gridItems.filter(g => g.gridIndex !== dragItem.index);
+        setGridItems(newGridItems);
+        
+        // Item returns to its original inventory slot
+        if (gridItemData) {
+          const newInv = [...inventory];
+          newInv[gridItemData.invIndex] = dragItem.item;
+          setInventory(newInv);
+        }
       }
       setDragItem(null);
     } else if (item) {
@@ -112,15 +123,21 @@ export default function Workbench({ inventory, setInventory, onCraft, onClose }:
         newGrid[dragItem.index] = gridItem;
         newGrid[index] = dragItem.item;
         setCraftGrid(newGrid);
+        // Update gridItems tracking - swap grid indices
+        const newGridItems = [...gridItems];
+        const item1 = newGridItems.find(g => g.gridIndex === dragItem.index);
+        const item2 = newGridItems.find(g => g.gridIndex === index);
+        if (item1) item1.gridIndex = index;
+        if (item2) item2.gridIndex = dragItem.index;
+        setGridItems(newGridItems);
       } else {
-        // Move from inventory to grid
+        // Move from inventory to grid - track which inventory item is in grid
         newGrid[index] = dragItem.item;
         setCraftGrid(newGrid);
         
-        // Remove from inventory (swap with grid item if any)
-        const newInv = [...inventory];
-        newInv[dragItem.index] = gridItem; // gridItem is null if grid was empty
-        setInventory(newInv);
+        // Track that this inventory item is now in grid at this grid index
+        const newGridItems = [...gridItems, { item: dragItem.item, invIndex: dragItem.index, gridIndex: index }];
+        setGridItems(newGridItems);
       }
       setDragItem(null);
     } else if (gridItem) {
@@ -132,21 +149,22 @@ export default function Workbench({ inventory, setInventory, onCraft, onClose }:
   const handleCraft = () => {
     if (!matchedRecipe) return;
     
-    // Remove items from inventory (they were already moved to grid)
+    // Remove items from inventory based on gridItems tracking
     const newInv = [...inventory];
-    for (const ingredient of matchedRecipe.ingredients) {
-      let toRemove = ingredient.count;
-      for (let i = 0; i < 27 && toRemove > 0; i++) {
-        if (newInv[i] === ingredient.item) {
-          newInv[i] = null;
-          toRemove--;
-        }
-      }
+    const itemsToRemove = [...gridItems];
+    
+    // Sort by invIndex descending to avoid index shifting issues
+    itemsToRemove.sort((a, b) => b.invIndex - a.invIndex);
+    
+    for (const gridItem of itemsToRemove) {
+      newInv[gridItem.invIndex] = null;
     }
+    
     setInventory(newInv);
     
-    // Clear grid
+    // Clear grid and tracking
     setCraftGrid(Array(9).fill(null));
+    setGridItems([]);
     
     // Give result
     onCraft(matchedRecipe.result.item, matchedRecipe.result.count);
@@ -158,6 +176,11 @@ export default function Workbench({ inventory, setInventory, onCraft, onClose }:
       const newGrid = [...craftGrid];
       newGrid[dragItem.index] = null;
       setCraftGrid(newGrid);
+      
+      // Remove from gridItems tracking
+      const newGridItems = gridItems.filter(g => g.gridIndex !== dragItem.index);
+      setGridItems(newGridItems);
+      
       setDragItem(null);
     } else if (dragItem && dragItem.from === 'inventory') {
       // Drop item from inventory (destroy it)
@@ -247,7 +270,7 @@ export default function Workbench({ inventory, setInventory, onCraft, onClose }:
           {/* Available recipes */}
           <div className="bg-gray-800/50 rounded-lg p-3">
             <h4 className="text-gray-300 font-bold mb-2 text-xs">📖 Доступные рецепты:</h4>
-            <div className="grid grid-cols-2 gap-2 text-xs">
+            <div className="space-y-1 text-xs">
               {CRAFT_RECIPES.filter(r => !r.requiresAdvancedWorkbench || hasAdvancedWorkbench).map(recipe => (
                 <div key={recipe.id} className="flex items-center gap-2 text-gray-400">
                   <ItemIcon itemId={recipe.result.item} size={16} />

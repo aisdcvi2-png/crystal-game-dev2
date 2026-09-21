@@ -16,12 +16,12 @@ interface GameWorldProps {
   onPortalActivated: () => void;
   hasPortalKey: boolean;
   droppedItems: { id: string; itemId: string; x: number; y: number; z: number; burnoutTime?: number }[];
-  onPickupItem: (itemId: string) => void;
+  onPickupItem: (droppedItemId: string) => void;
 }
 
 export default function GameWorld({
   onCrystalFound, playerPosition, availableCrystals, onBlockMined,
-  selectedSlot, hotbar, onPlaceBlock, onCrystalPickup, onCrystalHit, droppedCrystals, onPortalActivated, hasPortalKey, droppedItems, onPickupItem
+  selectedSlot, hotbar, onPlaceBlock, onCrystalPickup, onCrystalHit, droppedCrystals, onPortalActivated, hasPortalKey, droppedItems, onPickupItem: onPickupItemProp
 }: GameWorldProps) {
   const mountRef = useRef<HTMLDivElement>(null);
   const keysRef = useRef<{ [key: string]: boolean }>({});
@@ -56,7 +56,7 @@ export default function GameWorld({
   const torchLightsRef = useRef<Map<string, THREE.PointLight>>(new Map());
   const plantedSeedsRef = useRef<Map<string, { x: number; y: number; z: number; plantTime: number }>>(new Map());
   const droppedItemsRef = useRef(droppedItems);
-  const onPickupItemRef = useRef(onPickupItem);
+  const onPickupItemRef = useRef(onPickupItemProp);
   const droppedItemMeshesRef = useRef<Map<string, THREE.Group>>(new Map());
 
   useEffect(() => { hotbarRef.current = hotbar; }, [hotbar]);
@@ -68,7 +68,7 @@ export default function GameWorld({
   useEffect(() => { hasPortalKeyRef.current = hasPortalKey; }, [hasPortalKey]);
   useEffect(() => { onPortalActivatedRef.current = onPortalActivated; }, [onPortalActivated]);
   useEffect(() => { droppedItemsRef.current = droppedItems; }, [droppedItems]);
-  useEffect(() => { onPickupItemRef.current = onPickupItem; }, [onPickupItem]);
+  useEffect(() => { onPickupItemRef.current = onPickupItemProp; }, [onPickupItemProp]);
 
   const getBlockKey = (x: number, y: number, z: number) => `${x},${y},${z}`;
 
@@ -994,7 +994,7 @@ export default function GameWorld({
         // Check if player is near - pickup
         const dist = camera.position.distanceTo(itemMesh.position);
         if (dist < 2) {
-          onPickupItemRef.current(item.itemId);
+          onPickupItemRef.current(item.id);
           scene.remove(itemMesh);
           droppedItemMeshesRef.current.delete(item.id);
         }

@@ -121,8 +121,8 @@ export const ITEM_TYPES: Record<string, ItemType> = {
 // Crafting recipes - Minecraft style
 export const CRAFT_RECIPES: CraftRecipe[] = [
   // Basic materials (2x2 crafting, always available)
-  { id: 'planks', name: 'Доски', description: '1 бревно = 4 доски', ingredients: [{ item: 'oak_log_item', count: 1 }], result: { item: 'planks_block', count: 4 }, category: 'materials' },
-  { id: 'sticks', name: 'Палки', description: '2 доски = 4 палки', ingredients: [{ item: 'planks_block', count: 2 }], result: { item: 'stick', count: 4 }, category: 'materials' },
+  { id: 'planks', name: 'Доска', description: '2 дерева + 2 палки = 1 доска', ingredients: [{ item: 'oak_log_item', count: 2 }, { item: 'stick', count: 2 }], result: { item: 'planks_block', count: 1 }, category: 'materials' },
+  { id: 'sticks', name: 'Палка', description: '4 бревна = 1 палка', ingredients: [{ item: 'oak_log_item', count: 4 }], result: { item: 'stick', count: 1 }, category: 'materials' },
   
   // Advanced workbench (3x3 crafting)
   { id: 'advanced_workbench', name: 'Верстак 3x3', description: '4 доски + 4 камня', ingredients: [{ item: 'planks_block', count: 4 }, { item: 'cobblestone', count: 4 }], result: { item: 'advanced_workbench', count: 1 }, category: 'building' },
