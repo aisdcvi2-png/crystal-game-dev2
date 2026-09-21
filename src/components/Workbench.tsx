@@ -85,7 +85,7 @@ export default function Workbench({ inventory, setInventory, onCraft, onClose }:
         newInv[index] = dragItem.item;
         setInventory(newInv);
       } else {
-        // Move from grid to inventory - item returns to original inventory slot
+        // Move from grid to inventory - item returns to inventory
         const newGrid = [...craftGrid];
         newGrid[dragItem.index] = null; // Clear grid slot
         setCraftGrid(newGrid);
@@ -97,10 +97,16 @@ export default function Workbench({ inventory, setInventory, onCraft, onClose }:
         const newGridItems = gridItems.filter(g => g.gridIndex !== dragItem.index);
         setGridItems(newGridItems);
         
-        // Item returns to its original inventory slot
+        // Item returns to its original inventory slot (or to clicked slot if original is occupied)
         if (gridItemData) {
           const newInv = [...inventory];
-          newInv[gridItemData.invIndex] = dragItem.item;
+          // If original slot is empty, return there
+          if (!newInv[gridItemData.invIndex]) {
+            newInv[gridItemData.invIndex] = dragItem.item;
+          } else {
+            // Otherwise put in clicked slot
+            newInv[index] = dragItem.item;
+          }
           setInventory(newInv);
         }
       }
@@ -131,9 +137,22 @@ export default function Workbench({ inventory, setInventory, onCraft, onClose }:
         if (item2) item2.gridIndex = dragItem.index;
         setGridItems(newGridItems);
       } else {
-        // Move from inventory to grid - track which inventory item is in grid
+        // Check if this inventory item is already in the grid
+        const alreadyInGrid = gridItems.some(g => g.invIndex === dragItem.index);
+        if (alreadyInGrid) {
+          // Item already in grid, just clear drag
+          setDragItem(null);
+          return;
+        }
+        
+        // Move from inventory to grid - remove from inventory
         newGrid[index] = dragItem.item;
         setCraftGrid(newGrid);
+        
+        // Remove item from inventory
+        const newInv = [...inventory];
+        newInv[dragItem.index] = null;
+        setInventory(newInv);
         
         // Track that this inventory item is now in grid at this grid index
         const newGridItems = [...gridItems, { item: dragItem.item, invIndex: dragItem.index, gridIndex: index }];
@@ -281,15 +300,19 @@ export default function Workbench({ inventory, setInventory, onCraft, onClose }:
           </div>
         </div>
 
-        {/* Drop zone indicator */}
-        {dragItem && (
-          <div
-            onClick={handleDropOutside}
-            className="mt-4 bg-red-900/20 border-2 border-red-500/50 rounded-lg p-3 text-center cursor-pointer hover:bg-red-900/30"
-          >
-            <p className="text-red-300 text-sm">🗑️ Нажмите здесь чтобы выбросить предмет</p>
-          </div>
-        )}
+        {/* Drop zone indicator - always visible */}
+        <div
+          onClick={dragItem ? handleDropOutside : undefined}
+          className={`mt-4 border-2 rounded-lg p-3 text-center ${
+            dragItem 
+              ? 'bg-red-900/20 border-red-500/50 cursor-pointer hover:bg-red-900/30' 
+              : 'bg-gray-800/20 border-gray-600/30 cursor-not-allowed opacity-50'
+          }`}
+        >
+          <p className={`text-sm ${dragItem ? 'text-red-300' : 'text-gray-500'}`}>
+            {dragItem ? '🗑️ Нажмите здесь чтобы выбросить предмет' : '🗑️ Зона удаления (выберите предмет)'}
+          </p>
+        </div>
 
         <div className="mt-4 pt-3 border-t border-gray-700 text-center text-gray-500 text-xs">
           Нажмите <span className="text-white font-bold">ESC</span> чтобы закрыть

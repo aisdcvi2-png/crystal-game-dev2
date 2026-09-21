@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import * as THREE from 'three';
 import GameWorld from './components/GameWorld';
 import { questions, subjects, Question } from './data/questions';
-import { BLOCK_TYPES, ITEM_TYPES, CRAFT_RECIPES, TOOL_DURABILITY } from './data/gameData';
+import { BLOCK_TYPES, ITEM_TYPES, CRAFT_RECIPES, TOOL_DURABILITY, generateWorld, getSurfaceHeight } from './data/gameData';
 import ItemIcon from './components/ItemIcon';
 import Workbench from './components/Workbench';
 
@@ -362,7 +362,7 @@ function App() {
     if (blockData.drops) blockData.drops.forEach(drop => { if (Math.random() < drop.chance) addItem(drop.item, drop.count); });
     
     // Check if this block is near a crystal position
-    const crystalRadius = 3; // blocks radius to trigger crystal spawn
+    const crystalRadius = 5; // Increased radius to trigger crystal spawn
     const nearbyCrystal = crystalPositions.find(cp => {
       const dx = cp.x - x;
       const dy = cp.y - y;
@@ -370,6 +370,11 @@ function App() {
       const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
       return distance <= crystalRadius && !cp.collected;
     });
+    
+    // Debug log
+    if (nearbyCrystal) {
+      console.log('Crystal found nearby!', nearbyCrystal);
+    }
     
     if (nearbyCrystal && availableCrystals.length > 0) {
       const crystalId = nearbyCrystal.id;
@@ -470,6 +475,9 @@ function App() {
     const cellWidth = mapSize / gridSize;
     const cellHeight = mapSize / 4;
     
+    // Generate world to get surface heights
+    const tempWorld = generateWorld();
+    
     for (let i = 0; i < 20; i++) {
       const gridX = i % gridSize;
       const gridZ = Math.floor(i / gridSize);
@@ -479,10 +487,12 @@ function App() {
       const z = Math.floor(gridZ * cellHeight + Math.random() * cellHeight);
       
       // Find surface height at this position
-      const y = 5; // Default height, will be adjusted in GameWorld
+      const y = getSurfaceHeight(tempWorld, x, z);
       
       positions.push({ id: i, x, y, z, collected: false });
     }
+    
+    console.log('Generated crystal positions:', positions);
     
     setCrystalPositions(positions);
     setGameState('playing');

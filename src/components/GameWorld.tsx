@@ -974,7 +974,11 @@ export default function GameWorld({
           const itemMeshObj = new THREE.Mesh(itemGeo, itemMat);
           group.add(itemMeshObj);
           
-          group.position.set(item.x + 0.5, item.y + 0.5, item.z + 0.5);
+          // Ensure item is above ground
+          const groundY = getSurfaceHeight(worldData, item.x, item.z);
+          const itemY = Math.max(item.y, groundY + 1);
+          
+          group.position.set(item.x + 0.5, itemY + 0.5, item.z + 0.5);
           scene.add(group);
           droppedItemMeshesRef.current.set(item.id, group);
           itemMesh = group;
@@ -982,7 +986,8 @@ export default function GameWorld({
         
         // Animate item (floating and rotating)
         itemMesh.rotation.y += 0.02;
-        itemMesh.position.y = item.y + 0.5 + Math.sin(time * 2 + itemMesh.id) * 0.1;
+        const baseY = itemMesh.position.y;
+        itemMesh.position.y = baseY + Math.sin(time * 2 + itemMesh.id) * 0.1;
         
         // Check if torch burned out
         if (item.itemId === 'torch' && item.burnoutTime && Date.now() > item.burnoutTime) {
