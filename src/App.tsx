@@ -606,12 +606,13 @@ function App() {
     const itemId = hotbar[selectedSlot];
     if (!itemId) return;
     
-    // Remove from hotbar
-    setHotbar(prev => {
-      const newHotbar = [...prev];
-      newHotbar[selectedSlot] = null;
-      return newHotbar;
-    });
+    // Save itemId before async operations
+    const droppedItemId = itemId;
+    
+    // Remove from hotbar immediately
+    const newHotbar = [...hotbar];
+    newHotbar[selectedSlot] = null;
+    setHotbar(newHotbar);
     
     // Add to dropped items at player position
     const playerPos = playerPosition.current;
@@ -621,20 +622,20 @@ function App() {
     
     const newItem: any = {
       id: `${Date.now()}-${Math.random()}`,
-      itemId: itemId,
+      itemId: droppedItemId,
       x: dropX,
       y: dropY,
       z: dropZ
     };
     
     // If it's a torch, add burnout time (60 seconds)
-    if (itemId === 'torch') {
+    if (droppedItemId === 'torch') {
       newItem.burnoutTime = Date.now() + 60000;
     }
     
     setDroppedItems(prev => [...prev, newItem]);
     
-    showNotif(`📦 Выброшено: ${ITEM_TYPES[itemId].name}`);
+    showNotif(`📦 Выброшено: ${ITEM_TYPES[droppedItemId].name}`);
   }, [hotbar, selectedSlot, showNotif, playerPosition]);
 
   // Pickup dropped item
@@ -1026,14 +1027,21 @@ function App() {
                   
                   {/* Recipe book */}
                   <div className="bg-gray-800/50 rounded-lg p-3 mb-3">
-                    <h4 className="text-gray-300 font-bold mb-2 text-xs">📖 Рецепты (для справки)</h4>
-                    <div className="grid grid-cols-1 gap-1 max-h-40 overflow-y-auto">
-                      {CRAFT_RECIPES.filter(r => !r.requiresAdvancedWorkbench).map(recipe => (
-                        <div key={recipe.id} className="flex items-center gap-2 text-xs text-gray-400">
-                          <ItemIcon itemId={recipe.result.item} size={16} />
-                          <span className="truncate">{recipe.name}: {recipe.description}</span>
-                        </div>
-                      ))}
+                    <h4 className="text-gray-300 font-bold mb-2 text-xs">📖 Рецепты крафта</h4>
+                    <div className="space-y-2 text-xs">
+                      <div className="bg-gray-700/30 rounded p-2">
+                        <div className="text-amber-400 font-bold mb-1">🪵 Базовые (2x2):</div>
+                        <div className="text-gray-300">• 1 бревно → 4 доски</div>
+                        <div className="text-gray-300">• 2 доски → 4 палки</div>
+                      </div>
+                      <div className="bg-gray-700/30 rounded p-2">
+                        <div className="text-green-400 font-bold mb-1">🔨 Продвинутые (3x3):</div>
+                        <div className="text-gray-300">• 4 доски + 4 камня → Верстак 3x3</div>
+                        <div className="text-gray-300">• 1 уголь + 1 палка → 4 факела</div>
+                        <div className="text-gray-300">• 3 доски + 2 палки → Деревянная кирка</div>
+                        <div className="text-gray-300">• 3 камня + 2 палки → Каменная кирка</div>
+                        <div className="text-gray-300">• 1 руда + 1 уголь → Слиток</div>
+                      </div>
                     </div>
                     <p className="text-gray-500 text-[10px] mt-2">
                       💡 Базовый верстак 2x2 всегда доступен. Для сложных рецептов нужен верстак 3x3.

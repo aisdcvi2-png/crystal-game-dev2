@@ -75,8 +75,6 @@ export default function Workbench({ inventory, setInventory, onCraft, onClose }:
   const matchedRecipe = checkRecipe();
 
   const handleInventoryClick = (item: string | null, index: number) => {
-    if (!item) return;
-    
     if (dragItem) {
       // Swap or place
       if (dragItem.from === 'inventory') {
@@ -88,7 +86,7 @@ export default function Workbench({ inventory, setInventory, onCraft, onClose }:
       } else {
         // Move from grid to inventory
         const newGrid = [...craftGrid];
-        newGrid[dragItem.index] = item;
+        newGrid[dragItem.index] = item; // item can be null if inventory slot was empty
         setCraftGrid(newGrid);
         
         const newInv = [...inventory];
@@ -96,7 +94,8 @@ export default function Workbench({ inventory, setInventory, onCraft, onClose }:
         setInventory(newInv);
       }
       setDragItem(null);
-    } else {
+    } else if (item) {
+      // Pick up from inventory
       setDragItem({ item, from: 'inventory', index });
     }
   };
@@ -118,8 +117,9 @@ export default function Workbench({ inventory, setInventory, onCraft, onClose }:
         newGrid[index] = dragItem.item;
         setCraftGrid(newGrid);
         
+        // Remove from inventory (swap with grid item if any)
         const newInv = [...inventory];
-        newInv[dragItem.index] = gridItem;
+        newInv[dragItem.index] = gridItem; // gridItem is null if grid was empty
         setInventory(newInv);
       }
       setDragItem(null);
@@ -132,7 +132,20 @@ export default function Workbench({ inventory, setInventory, onCraft, onClose }:
   const handleCraft = () => {
     if (!matchedRecipe) return;
     
-    // Remove items from grid
+    // Remove items from inventory (they were already moved to grid)
+    const newInv = [...inventory];
+    for (const ingredient of matchedRecipe.ingredients) {
+      let toRemove = ingredient.count;
+      for (let i = 0; i < 27 && toRemove > 0; i++) {
+        if (newInv[i] === ingredient.item) {
+          newInv[i] = null;
+          toRemove--;
+        }
+      }
+    }
+    setInventory(newInv);
+    
+    // Clear grid
     setCraftGrid(Array(9).fill(null));
     
     // Give result
@@ -223,12 +236,26 @@ export default function Workbench({ inventory, setInventory, onCraft, onClose }:
           </div>
         </div>
 
-        {/* Instructions */}
-        <div className="mt-4 bg-blue-900/20 border border-blue-500/30 rounded-lg p-3">
-          <p className="text-blue-300 text-sm">
-            💡 Кликайте на предметы чтобы перемещать их между инвентарём и сеткой крафта. 
-            Перетащите нужные материалы в сетку 3x3 согласно рецепту.
-          </p>
+        {/* Instructions and Recipes */}
+        <div className="mt-4 space-y-2">
+          <div className="bg-blue-900/20 border border-blue-500/30 rounded-lg p-3">
+            <p className="text-blue-300 text-sm">
+              💡 Кликайте на предметы чтобы перемещать их между инвентарём и сеткой крафта.
+            </p>
+          </div>
+          
+          {/* Available recipes */}
+          <div className="bg-gray-800/50 rounded-lg p-3">
+            <h4 className="text-gray-300 font-bold mb-2 text-xs">📖 Доступные рецепты:</h4>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              {CRAFT_RECIPES.filter(r => !r.requiresAdvancedWorkbench || hasAdvancedWorkbench).map(recipe => (
+                <div key={recipe.id} className="flex items-center gap-2 text-gray-400">
+                  <ItemIcon itemId={recipe.result.item} size={16} />
+                  <span className="truncate">{recipe.name}: {recipe.description}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
 
         {/* Drop zone indicator */}
